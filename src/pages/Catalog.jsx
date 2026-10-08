@@ -35,7 +35,7 @@ function Catalog({ user }) {
   };
 
   const getEmbedUrl = (link) => {
-    if (!link) return "";
+    if (!link) return null;
 
     // YouTube
     const youtubeId = getYoutubeId(link);
@@ -49,7 +49,22 @@ function Catalog({ user }) {
       return `https://drive.google.com/file/d/${driveMatch[1]}/preview`;
     }
 
-    // Si es Mega u otro enlace → null (mostramos botón)
+    // Internet Archive
+    if (link.includes("archive.org")) {
+      // Convierte /details/ a /embed/
+      if (link.includes("/details/")) {
+        return link.replace("/details/", "/embed/");
+      }
+      // Si ya es /embed/, lo dejamos
+      if (link.includes("/embed/")) {
+        return link;
+      }
+      // Si es solo el identificador
+      const identifier = link.split("/").pop();
+      return `https://archive.org/embed/${identifier}`;
+    }
+
+    // Mega u otros → null (mostramos botón)
     return null;
   };
 
@@ -91,6 +106,7 @@ function Catalog({ user }) {
   if (selected) {
     const isSeries = selected.type === "series";
     const videoLink = isSeries ? currentEpisode?.link : selected.driveLink;
+    const embedUrl = getEmbedUrl(videoLink);
 
     return (
       <div style={{ padding: "20px", maxWidth: "1200px", margin: "0 auto" }}>
@@ -127,10 +143,10 @@ function Catalog({ user }) {
           <p style={{ marginBottom: "20px", maxWidth: "800px" }}>{selected.description}</p>
         )}
 
-        {/* ========== REPRODUCTOR O BOTÓN DE MEGA ========== */}
+        {/* ========== REPRODUCTOR ========== */}
         {videoLink ? (
           isMegaLink(videoLink) ? (
-            // ===== BOTÓN PARA MEGA =====
+            // Botón para Mega
             <div
               style={{
                 padding: "60px 20px",
@@ -157,17 +173,14 @@ function Catalog({ user }) {
                   fontSize: "18px",
                   fontWeight: "bold",
                   borderRadius: "8px",
-                  textDecoration: "none",
-                  transition: "background 0.2s"
+                  textDecoration: "none"
                 }}
-                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#b71c1c")}
-                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "#D9272E")}
               >
                 Ver en Mega
               </a>
             </div>
-          ) : (
-            // ===== IFRAME PARA YOUTUBE / GOOGLE DRIVE =====
+          ) : embedUrl ? (
+            // Iframe para YouTube / Drive / Internet Archive
             <div
               style={{
                 position: "relative",
@@ -180,24 +193,19 @@ function Catalog({ user }) {
               }}
             >
               <iframe
-                src={getEmbedUrl(videoLink)}
+                src={embedUrl}
                 style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", border: "none" }}
-                allow="autoplay; encrypted-media"
+                allow="autoplay; encrypted-media; fullscreen"
                 allowFullScreen
               ></iframe>
             </div>
+          ) : (
+            <div style={{ padding: "40px", textAlign: "center", color: "#888", backgroundColor: "#111", borderRadius: "8px", marginBottom: "25px" }}>
+              No se pudo cargar el video
+            </div>
           )
         ) : (
-          <div
-            style={{
-              padding: "40px",
-              textAlign: "center",
-              color: "#888",
-              backgroundColor: "#111",
-              borderRadius: "8px",
-              marginBottom: "25px"
-            }}
-          >
+          <div style={{ padding: "40px", textAlign: "center", color: "#888", backgroundColor: "#111", borderRadius: "8px", marginBottom: "25px" }}>
             No hay video disponible
           </div>
         )}
@@ -217,8 +225,7 @@ function Catalog({ user }) {
                     backgroundColor: currentEpisode?.number === ep.number ? "#2196F3" : "#1e1e1e",
                     borderRadius: "8px",
                     cursor: "pointer",
-                    border: currentEpisode?.number === ep.number ? "2px solid #64b5f6" : "1px solid #333",
-                    transition: "all 0.2s"
+                    border: currentEpisode?.number === ep.number ? "2px solid #64b5f6" : "1px solid #333"
                   }}
                 >
                   <div style={{ fontWeight: "bold", marginBottom: "4px" }}>Episodio {ep.number}</div>
