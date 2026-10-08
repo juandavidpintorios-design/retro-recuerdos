@@ -1,177 +1,140 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { onAuthStateChanged, signOut } from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
+import { auth, db } from "./firebase";
 import Register from "./pages/Register";
 import Login from "./pages/Login";
 import Admin from "./pages/Admin";
-import ContentAdmin from "./pages/ContentAdmin";
-import Catalog from "./pages/Catalog";
 
 function App() {
   const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [showRegister, setShowRegister] = useState(false);
-  const [adminView, setAdminView] = useState(null); // null | "users" | "content"
+  const [showAdmin, setShowAdmin] = useState(false);
+
+  // Mantener la sesión aunque se recargue la página
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        try {
+          const userDoc = await getDoc(doc(db, "users", firebaseUser.uid));
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
+            setUser({
+              uid: firebaseUser.uid,
+              email: firebaseUser.email,
+              displayName: userData.displayName,
+              role: userData.role,
+              status: userData.status
+            });
+          } else {
+            setUser(null);
+          }
+        } catch (error) {
+          console.error("Error al cargar usuario:", error);
+          setUser(null);
+        }
+      } else {
+        setUser(null);
+      }
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   const handleLoginSuccess = (userData) => {
     setUser(userData);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await signOut(auth);
     setUser(null);
-    setAdminView(null);
+    setShowAdmin(false);
   };
 
-  // ========== SI EL USUARIO YA INICIÓ SESIÓN ==========
-  if (user) {
+  if (loading) {
+    return (
+      <div style={{ textAlign: "center", marginTop: "100px" }}>
+        <h2>Cargando...</h2>
+      </div>
+    );
+  }
 
-    // --- PANEL DE ADMINISTRACIÓN ---
-    if (user.role === "admin" && adminView) {
+  // Si el usuario ya inició sesión
+  if (user) {
+    if (user.role === "admin" && showAdmin) {
       return (
         <div>
-          <div style={{ 
-            padding: "12px 20px", 
-            backgroundColor: "#1a1a1a", 
-            color: "white", 
-            display: "flex", 
-            justifyContent: "space-between", 
-            alignItems: "center",
-            flexWrap: "wrap",
-            gap: "10px"
-          }}>
+          <div style={{ padding: "15px", backgroundColor: "#222", color: "white", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <h2 style={{ margin: 0 }}>Retro Recuerdos - Admin</h2>
-            
-            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+            <div>
               <button 
-                onClick={() => setAdminView("users")}
-                style={{ 
-                  padding: "8px 16px", 
-                  backgroundColor: adminView === "users" ? "#2196F3" : "#444",
-                  color: "white", 
-                  border: "none", 
-                  borderRadius: "4px",
-                  cursor: "pointer" 
-                }}
+                onClick={() => setShowAdmin(false)}
+                style={{ marginRight: "10px", padding: "8px 16px", cursor: "pointer" }}
               >
-                Usuarios
+                Volver
               </button>
-              
-              <button 
-                onClick={() => setAdminView("content")}
-                style={{ 
-                  padding: "8px 16px", 
-                  backgroundColor: adminView === "content" ? "#2196F3" : "#444",
-                  color: "white", 
-                  border: "none", 
-                  borderRadius: "4px",
-                  cursor: "pointer" 
-                }}
-              >
-                Películas / Series
-              </button>
-
-              <button 
-                onClick={() => setAdminView(null)}
-                style={{ padding: "8px 16px", cursor: "pointer" }}
-              >
-                Volver al catálogo
-              </button>
-
               <button 
                 onClick={handleLogout}
-                style={{ 
-                  padding: "8px 16px", 
-                  backgroundColor: "#f44336", 
-                  color: "white", 
-                  border: "none", 
-                  borderRadius: "4px",
-                  cursor: "pointer" 
-                }}
+                style={{ padding: "8px 16px", backgroundColor: "#f44336", color: "white", border: "none", cursor: "pointer" }}
               >
                 Cerrar sesión
               </button>
             </div>
           </div>
-
-          {adminView === "users" && <Admin />}
-          {adminView === "content" && <ContentAdmin />}
+          <Admin />
         </div>
       );
     }
 
-    // --- CATÁLOGO (para todos los usuarios activos) ---
     return (
-      <div>
-        {/* Barra superior */}
-        <div style={{ 
-          padding: "12px 20px", 
-          backgroundColor: "#111", 
-          color: "white", 
-          display: "flex", 
-          justifyContent: "space-between", 
-          alignItems: "center",
-          flexWrap: "wrap",
-          gap: "10px"
-        }}>
-          <h2 style={{ margin: 0 }}>Retro Recuerdos</h2>
-          
-          <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
-            <span style={{ fontSize: "14px" }}>Hola, {user.displayName}</span>
+      <div style={{ padding: "40px", textAlign: "center" }}>
+        <h1>Bienvenido a Retro Recuerdos</h1>
+        <p>Hola, <strong>{user.displayName}</strong></p>
+        <p>Correo: {user.email}</p>
+        <p>Rol: {user.role}</p>
+        <p>Estado: {user.status}</p>
 
-            {user.role === "admin" && (
-              <>
-                <button
-                  onClick={() => setAdminView("users")}
-                  style={{
-                    padding: "7px 14px",
-                    backgroundColor: "#2196F3",
-                    color: "white",
-                    border: "none",
-                    borderRadius: "4px",
-                    cursor: "pointer",
-                    fontSize: "13px"
-                  }}
-                >
-                  Usuarios
-                </button>
-                <button
-                  onClick={() => setAdminView("content")}
-                  style={{
-                    padding: "7px 14px",
-                    backgroundColor: "#4CAF50",
-                    color: "white",
-                    border: "none",
-                    borderRadius: "4px",
-                    cursor: "pointer",
-                    fontSize: "13px"
-                  }}
-                >
-                  Contenido
-                </button>
-              </>
-            )}
-
+        {user.role === "admin" && (
+          <div style={{ marginTop: "20px" }}>
+            <p style={{ color: "green", fontWeight: "bold" }}>Eres administrador</p>
             <button
-              onClick={handleLogout}
+              onClick={() => setShowAdmin(true)}
               style={{
-                padding: "7px 14px",
-                backgroundColor: "#f44336",
+                padding: "12px 24px",
+                backgroundColor: "#2196F3",
                 color: "white",
                 border: "none",
                 borderRadius: "4px",
                 cursor: "pointer",
-                fontSize: "13px"
+                fontSize: "16px"
               }}
             >
-              Cerrar sesión
+              Ir al Panel de Administración
             </button>
           </div>
-        </div>
+        )}
 
-        {/* Catálogo */}
-        <Catalog user={user} />
+        <br /><br />
+        <button
+          onClick={handleLogout}
+          style={{
+            padding: "10px 20px",
+            backgroundColor: "#f44336",
+            color: "white",
+            border: "none",
+            borderRadius: "4px",
+            cursor: "pointer"
+          }}
+        >
+          Cerrar sesión
+        </button>
       </div>
     );
   }
 
-  // ========== LOGIN / REGISTRO ==========
+  // Si no ha iniciado sesión
   return (
     <div>
       {showRegister ? (
