@@ -18,6 +18,7 @@ function Admin() {
   const [message, setMessage] = useState("");
 
   // Formulario
+  const [editingId, setEditingId] = useState(null); // null = crear nuevo
   const [title, setTitle] = useState("");
   const [type, setType] = useState("movie");
   const [description, setDescription] = useState("");
@@ -25,7 +26,7 @@ function Admin() {
   const [year, setYear] = useState("");
   const [driveLink, setDriveLink] = useState("");
   const [genres, setGenres] = useState("");
-  const [episodesText, setEpisodesText] = useState(""); // para series
+  const [episodesText, setEpisodesText] = useState("");
 
   const loadUsers = async () => {
     const querySnapshot = await getDocs(collection(db, "users"));
@@ -66,6 +67,39 @@ function Admin() {
     }
   };
 
+  const resetForm = () => {
+    setEditingId(null);
+    setTitle("");
+    setType("movie");
+    setDescription("");
+    setPoster("");
+    setYear("");
+    setDriveLink("");
+    setGenres("");
+    setEpisodesText("");
+  };
+
+  const handleEdit = (item) => {
+    setEditingId(item.id);
+    setTitle(item.title || "");
+    setType(item.type || "movie");
+    setDescription(item.description || "");
+    setPoster(item.poster || "");
+    setYear(item.year || "");
+    setDriveLink(item.driveLink || "");
+    setGenres((item.genres || []).join(", "));
+    
+    if (item.type === "series" && item.episodes) {
+      const text = item.episodes.map(ep => `${ep.title} | ${ep.driveLink}`).join("\n");
+      setEpisodesText(text);
+    } else {
+      setEpisodesText("");
+    }
+
+    // Scroll al formulario
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   const handleAddContent = async (e) => {
     e.preventDefault();
     try {
@@ -77,17 +111,13 @@ function Admin() {
         year: Number(year) || null,
         genres: genres.split(",").map(g => g.trim()).filter(g => g),
         status: "published",
-        createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       };
 
       if (type === "movie") {
         data.driveLink = driveLink;
+        data.episodes = [];
       } else {
-        // Serie: parsear episodios
-        // Formato esperado: 
-        // Episodio 1 | https://enlace1
-        // Episodio 2 | https://enlace2
         const lines = episodesText.split("\n").filter(l => l.trim());
         data.episodes = lines.map((line, i) => {
           const parts = line.split("|").map(p => p.trim());
@@ -96,23 +126,26 @@ function Admin() {
             driveLink: parts[1] || parts[0]
           };
         });
+        data.driveLink = "";
       }
 
-      await addDoc(collection(db, "content"), data);
+      if (editingId) {
+        // Actualizar existente
+        await updateDoc(doc(db, "content", editingId), data);
+        setMessage("Contenido actualizado correctamente");
+      } else {
+        // Crear nuevo
+        data.createdAt = serverTimestamp();
+        await addDoc(collection(db, "content"), data);
+        setMessage("Contenido agregado correctamente");
+      }
 
-      setMessage("Contenido agregado correctamente");
-      setTitle("");
-      setDescription("");
-      setPoster("");
-      setYear("");
-      setDriveLink("");
-      setGenres("");
-      setEpisodesText("");
+      resetForm();
       loadContent();
       setTimeout(() => setMessage(""), 3000);
     } catch (error) {
       console.error(error);
-      setMessage("Error al agregar contenido");
+      setMessage("Error al guardar contenido");
     }
   };
 
@@ -120,6 +153,7 @@ function Admin() {
     if (window.confirm("¿Seguro que quieres eliminar este título?")) {
       await deleteDoc(doc(db, "content", id));
       setMessage("Eliminado correctamente");
+      if (editingId === id) resetForm();
       loadContent();
       setTimeout(() => setMessage(""), 3000);
     }
@@ -217,7 +251,17 @@ function Admin() {
 
       {tab === "content" && (
         <div>
-          <h2>Agregar Película o Serie</h2>
+          <h2>{editingId ? "Editar contenido" : "Agregar Película o Serie"}</h2>
+          
+          {editingId && (
+            <button 
+              onClick={resetForm}
+              style={{ marginBottom: "15px", padding: "6px 12px", backgroundColor: "#666", color: "white", border: "none", borderRadius: "4px", cursor: "pointer" }}
+            >
+              Cancelar edición
+            </button>
+          )}
+
           <form onSubmit={handleAddContent} style={{ backgroundColor: "#1e1e1e", padding: "20px", borderRadius: "8px", marginBottom: "30px" }}>
             <div style={{ marginBottom: "12px" }}>
               <label>Título *</label>
@@ -269,7 +313,7 @@ function Admin() {
                 <textarea
                   value={episodesText}
                   onChange={(e) => setEpisodesText(e.target.value)}
-                  rows="6"
+                  rows="8"
                   placeholder="Episodio 1 | https://..."
                   style={{ width: "100%", padding: "8px", marginTop: "4px", background: "#333", color: "white", border: "1px solid #555" }}
                 />
@@ -277,7 +321,7 @@ function Admin() {
             )}
 
             <button type="submit" style={{ padding: "10px 20px", backgroundColor: "#4CAF50", color: "white", border: "none", borderRadius: "4px", cursor: "pointer" }}>
-              Agregar
+              {editingId ? "Guardar cambios" : "Agregar"}
             </button>
           </form>
 
@@ -298,7 +342,16 @@ function Admin() {
                   <td style={{ padding: "12px" }}>{item.type === "movie" ? "Película" : "Serie"}</td>
                   <td style={{ padding: "12px" }}>{item.year || "-"}</td>
                   <td style={{ padding: "12px" }}>
-                    <button onClick={() => handleDelete(item.id)} style={{ padding: "6px 12px", backgroundColor: "#dc3545", color: "white", border: "none", borderRadius: "4px", cursor: "pointer" }}>
+                    <button 
+                      onClick={() => handleEdit(item)} 
+                      style={{ marginRight: "8px", padding: "6px 12px", backgroundColor: "#2196F3", color: "white", border: "none", borderRadius: "4px", cursor: "pointer" }}
+                    >
+                      Editar
+                    </button>
+                    <button 
+                      onClick={() => handleDelete(item.id)} 
+                      style={{ padding: "6px 12px", backgroundColor: "#dc3545", color: "white", border: "none", borderRadius: "4px", cursor: "pointer" }}
+                    >
                       Eliminar
                     </button>
                   </td>
