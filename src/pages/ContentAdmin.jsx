@@ -13,7 +13,7 @@ function ContentAdmin() {
   const [description, setDescription] = useState("");
   const [poster, setPoster] = useState("");
   const [year, setYear] = useState("");
-  const [driveLink, setDriveLink] = useState(""); // solo para películas
+  const [driveLink, setDriveLink] = useState(""); // para películas
 
   // Episodios (solo para series)
   const [episodes, setEpisodes] = useState([
@@ -55,8 +55,7 @@ function ContentAdmin() {
   const removeEpisode = (index) => {
     if (episodes.length === 1) return;
     const updated = episodes.filter((_, i) => i !== index);
-    // renumerar
-    updated.forEach((ep, i) => ep.number = i + 1);
+    updated.forEach((ep, i) => (ep.number = i + 1));
     setEpisodes(updated);
   };
 
@@ -78,8 +77,7 @@ function ContentAdmin() {
       if (type === "movie") {
         data.driveLink = driveLink;
       } else {
-        // Serie: guardar episodios
-        data.episodes = episodes.filter(ep => ep.link.trim() !== "");
+        data.episodes = episodes.filter((ep) => ep.link.trim() !== "");
       }
 
       await addDoc(collection(db, "content"), data);
@@ -92,6 +90,7 @@ function ContentAdmin() {
       setDriveLink("");
       setEpisodes([{ number: 1, title: "", link: "" }]);
       loadContents();
+
       setTimeout(() => setMessage(""), 3000);
     } catch (error) {
       console.error(error);
@@ -101,6 +100,7 @@ function ContentAdmin() {
 
   const handleDelete = async (id) => {
     if (!confirm("¿Seguro que quieres eliminar este contenido?")) return;
+
     try {
       await deleteDoc(doc(db, "content", id));
       setMessage("Contenido eliminado");
@@ -156,13 +156,13 @@ function ContentAdmin() {
         {/* ===== PELÍCULA ===== */}
         {type === "movie" && (
           <div style={{ marginBottom: "12px" }}>
-            <label>Enlace de YouTube o Google Drive</label>
+            <label>Enlace de Mega / Google Drive / YouTube</label>
             <input
               type="url"
               value={driveLink}
               onChange={(e) => setDriveLink(e.target.value)}
               required
-              placeholder="https://www.youtube.com/watch?v=..."
+              placeholder="https://mega.nz/file/..."
               style={{ width: "100%", padding: "8px" }}
             />
           </div>
@@ -178,7 +178,11 @@ function ContentAdmin() {
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
                   <strong>Episodio {ep.number}</strong>
                   {episodes.length > 1 && (
-                    <button type="button" onClick={() => removeEpisode(index)} style={{ background: "#dc3545", color: "white", border: "none", borderRadius: "4px", padding: "2px 8px", cursor: "pointer" }}>
+                    <button
+                      type="button"
+                      onClick={() => removeEpisode(index)}
+                      style={{ background: "#dc3545", color: "white", border: "none", borderRadius: "4px", padding: "2px 8px", cursor: "pointer" }}
+                    >
                       Eliminar
                     </button>
                   )}
@@ -194,7 +198,7 @@ function ContentAdmin() {
 
                 <input
                   type="url"
-                  placeholder="Enlace de YouTube o Google Drive"
+                  placeholder="Enlace de Mega / Google Drive / YouTube"
                   value={ep.link}
                   onChange={(e) => updateEpisode(index, "link", e.target.value)}
                   required
@@ -203,7 +207,11 @@ function ContentAdmin() {
               </div>
             ))}
 
-            <button type="button" onClick={addEpisodeField} style={{ padding: "8px 16px", backgroundColor: "#2196F3", color: "white", border: "none", borderRadius: "4px", cursor: "pointer" }}>
+            <button
+              type="button"
+              onClick={addEpisodeField}
+              style={{ padding: "8px 16px", backgroundColor: "#2196F3", color: "white", border: "none", borderRadius: "4px", cursor: "pointer" }}
+            >
               + Agregar otro episodio
             </button>
           </div>

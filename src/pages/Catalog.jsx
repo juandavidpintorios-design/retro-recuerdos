@@ -37,17 +37,24 @@ function Catalog({ user }) {
   const getEmbedUrl = (link) => {
     if (!link) return "";
 
+    // YouTube
     const youtubeId = getYoutubeId(link);
     if (youtubeId) {
       return `https://www.youtube.com/embed/${youtubeId}?rel=0`;
     }
 
+    // Google Drive
     const driveMatch = link.match(/\/d\/([a-zA-Z0-9_-]+)/);
     if (driveMatch && driveMatch[1]) {
       return `https://drive.google.com/file/d/${driveMatch[1]}/preview`;
     }
 
-    return link;
+    // Si es Mega u otro enlace → null (mostramos botón)
+    return null;
+  };
+
+  const isMegaLink = (link) => {
+    return link && link.includes("mega.nz");
   };
 
   const getPoster = (item) => {
@@ -68,7 +75,6 @@ function Catalog({ user }) {
 
   const handleSelect = (item) => {
     setSelected(item);
-
     if (item.type === "series" && item.episodes && item.episodes.length > 0) {
       setCurrentEpisode(item.episodes[0]);
     } else {
@@ -81,6 +87,7 @@ function Catalog({ user }) {
     setCurrentEpisode(null);
   };
 
+  // ================== VISTA DE REPRODUCCIÓN ==================
   if (selected) {
     const isSeries = selected.type === "series";
     const videoLink = isSeries ? currentEpisode?.link : selected.driveLink;
@@ -120,21 +127,82 @@ function Catalog({ user }) {
           <p style={{ marginBottom: "20px", maxWidth: "800px" }}>{selected.description}</p>
         )}
 
-        <div style={{ position: "relative", paddingBottom: "56.25%", height: 0, overflow: "hidden", borderRadius: "8px", backgroundColor: "#000", marginBottom: "25px" }}>
-          {videoLink ? (
-            <iframe
-              src={getEmbedUrl(videoLink)}
-              style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", border: "none" }}
-              allow="autoplay; encrypted-media"
-              allowFullScreen
-            ></iframe>
-          ) : (
-            <div style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "#888" }}>
-              No hay video disponible
+        {/* ========== REPRODUCTOR O BOTÓN DE MEGA ========== */}
+        {videoLink ? (
+          isMegaLink(videoLink) ? (
+            // ===== BOTÓN PARA MEGA =====
+            <div
+              style={{
+                padding: "60px 20px",
+                backgroundColor: "#111",
+                borderRadius: "12px",
+                textAlign: "center",
+                marginBottom: "25px",
+                border: "1px solid #333"
+              }}
+            >
+              <h3 style={{ marginBottom: "10px", color: "#fff" }}>Este contenido está alojado en Mega</h3>
+              <p style={{ color: "#aaa", marginBottom: "25px" }}>
+                Haz clic en el botón para verlo o descargarlo
+              </p>
+              <a
+                href={videoLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: "inline-block",
+                  padding: "16px 40px",
+                  backgroundColor: "#D9272E",
+                  color: "white",
+                  fontSize: "18px",
+                  fontWeight: "bold",
+                  borderRadius: "8px",
+                  textDecoration: "none",
+                  transition: "background 0.2s"
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#b71c1c")}
+                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "#D9272E")}
+              >
+                Ver en Mega
+              </a>
             </div>
-          )}
-        </div>
+          ) : (
+            // ===== IFRAME PARA YOUTUBE / GOOGLE DRIVE =====
+            <div
+              style={{
+                position: "relative",
+                paddingBottom: "56.25%",
+                height: 0,
+                overflow: "hidden",
+                borderRadius: "8px",
+                backgroundColor: "#000",
+                marginBottom: "25px"
+              }}
+            >
+              <iframe
+                src={getEmbedUrl(videoLink)}
+                style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", border: "none" }}
+                allow="autoplay; encrypted-media"
+                allowFullScreen
+              ></iframe>
+            </div>
+          )
+        ) : (
+          <div
+            style={{
+              padding: "40px",
+              textAlign: "center",
+              color: "#888",
+              backgroundColor: "#111",
+              borderRadius: "8px",
+              marginBottom: "25px"
+            }}
+          >
+            No hay video disponible
+          </div>
+        )}
 
+        {/* Lista de episodios (solo series) */}
         {isSeries && selected.episodes && selected.episodes.length > 0 && (
           <div>
             <h3 style={{ marginBottom: "15px" }}>Episodios</h3>
@@ -153,9 +221,7 @@ function Catalog({ user }) {
                     transition: "all 0.2s"
                   }}
                 >
-                  <div style={{ fontWeight: "bold", marginBottom: "4px" }}>
-                    Episodio {ep.number}
-                  </div>
+                  <div style={{ fontWeight: "bold", marginBottom: "4px" }}>Episodio {ep.number}</div>
                   <div style={{ fontSize: "13px", color: currentEpisode?.number === ep.number ? "#e3f2fd" : "#aaa" }}>
                     {ep.title || `Episodio ${ep.number}`}
                   </div>
@@ -168,6 +234,7 @@ function Catalog({ user }) {
     );
   }
 
+  // ================== VISTA DEL CATÁLOGO ==================
   return (
     <div style={{ padding: "30px 20px", maxWidth: "1200px", margin: "0 auto" }}>
       <h1 style={{ marginBottom: "10px" }}>Catálogo</h1>
@@ -183,7 +250,6 @@ function Catalog({ user }) {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: "20px" }}>
           {contents.map((item) => {
             const poster = getPoster(item);
-
             return (
               <div
                 key={item.id}
@@ -199,21 +265,19 @@ function Catalog({ user }) {
                 onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
               >
                 {poster ? (
-                  <img
-                    src={poster}
-                    alt={item.title}
-                    style={{ width: "100%", height: "270px", objectFit: "cover" }}
-                  />
+                  <img src={poster} alt={item.title} style={{ width: "100%", height: "270px", objectFit: "cover" }} />
                 ) : (
-                  <div style={{
-                    width: "100%",
-                    height: "270px",
-                    backgroundColor: "#333",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    color: "#888"
-                  }}>
+                  <div
+                    style={{
+                      width: "100%",
+                      height: "270px",
+                      backgroundColor: "#333",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      color: "#888"
+                    }}
+                  >
                     Sin portada
                   </div>
                 )}
