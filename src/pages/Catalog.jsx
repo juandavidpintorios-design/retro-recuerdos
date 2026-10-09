@@ -64,9 +64,7 @@ function Catalog({ user }) {
     return null;
   };
 
-  const isMegaLink = (link) => {
-    return link && link.includes("mega.nz");
-  };
+  const isMegaLink = (link) => link && link.includes("mega.nz");
 
   const getPoster = (item) => {
     if (item.poster) return item.poster;
@@ -86,8 +84,11 @@ function Catalog({ user }) {
 
   const handleSelect = (item) => {
     setSelected(item);
+
     if (item.type === "series" && item.episodes && item.episodes.length > 0) {
-      setCurrentEpisode(item.episodes[0]);
+      // Aseguramos que el primer episodio tenga número
+      const first = { ...item.episodes[0], number: item.episodes[0].number || 1 };
+      setCurrentEpisode(first);
     } else {
       setCurrentEpisode(null);
     }
@@ -107,7 +108,6 @@ function Catalog({ user }) {
     return (
       <div style={{ padding: "16px", maxWidth: "1200px", margin: "0 auto", color: "#fff" }}>
         
-        {/* Botón volver */}
         <button
           onClick={handleBack}
           style={{
@@ -124,15 +124,14 @@ function Catalog({ user }) {
           ← Volver al catálogo
         </button>
 
-        {/* Título y datos */}
-        <h1 style={{ margin: "0 0 8px 0", fontSize: "24px", lineHeight: "1.3" }}>
+        <h1 style={{ margin: "0 0 8px 0", fontSize: "22px", lineHeight: "1.3" }}>
           {selected.title}
         </h1>
 
         {isSeries && currentEpisode && (
           <p style={{ color: "#4CAF50", margin: "0 0 6px 0", fontSize: "16px" }}>
-            Episodio {currentEpisode.number}
-            {currentEpisode.title && `: ${currentEpisode.title}`}
+            Episodio {currentEpisode.number || "?"}
+            {currentEpisode.title ? `: ${currentEpisode.title}` : ""}
           </p>
         )}
 
@@ -147,21 +146,18 @@ function Catalog({ user }) {
           </p>
         )}
 
-        {/* ========== REPRODUCTOR ========== */}
+        {/* REPRODUCTOR */}
         {videoLink ? (
           isMegaLink(videoLink) ? (
-            <div
-              style={{
-                padding: "50px 20px",
-                backgroundColor: "#111",
-                borderRadius: "12px",
-                textAlign: "center",
-                marginBottom: "30px",
-                border: "1px solid #333"
-              }}
-            >
+            <div style={{
+              padding: "50px 20px",
+              backgroundColor: "#111",
+              borderRadius: "12px",
+              textAlign: "center",
+              marginBottom: "30px",
+              border: "1px solid #333"
+            }}>
               <h3 style={{ marginBottom: "10px" }}>Este contenido está en Mega</h3>
-              <p style={{ color: "#aaa", marginBottom: "20px" }}>Haz clic para verlo o descargarlo</p>
               <a
                 href={videoLink}
                 target="_blank"
@@ -181,54 +177,49 @@ function Catalog({ user }) {
               </a>
             </div>
           ) : embedUrl ? (
-            <div
-              style={{
-                position: "relative",
-                paddingBottom: "56.25%",
-                height: 0,
-                overflow: "hidden",
-                borderRadius: "10px",
-                backgroundColor: "#000",
-                marginBottom: "30px"
-              }}
-            >
+            <div style={{
+              position: "relative",
+              paddingBottom: "56.25%",
+              height: 0,
+              overflow: "hidden",
+              borderRadius: "10px",
+              backgroundColor: "#000",
+              marginBottom: "30px"
+            }}>
               <iframe
                 src={embedUrl}
-                style={{
-                  position: "absolute",
-                  top: 0,
-                  left: 0,
-                  width: "100%",
-                  height: "100%",
-                  border: "none"
-                }}
+                style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", border: "none" }}
                 allow="autoplay; encrypted-media; fullscreen"
                 allowFullScreen
               ></iframe>
             </div>
           ) : (
             <div style={{ padding: "40px", textAlign: "center", color: "#888", backgroundColor: "#111", borderRadius: "8px", marginBottom: "30px" }}>
-              No se pudo cargar el video
+              No se pudo cargar el video<br/>
+              <small style={{ color: "#666" }}>Enlace no compatible</small>
             </div>
           )
         ) : (
           <div style={{ padding: "40px", textAlign: "center", color: "#888", backgroundColor: "#111", borderRadius: "8px", marginBottom: "30px" }}>
-            No hay video disponible
+            No hay video disponible<br/>
+            <small style={{ color: "#666" }}>Este episodio no tiene enlace</small>
           </div>
         )}
 
-        {/* ========== LISTA DE EPISODIOS (abajo) ========== */}
+        {/* LISTA DE EPISODIOS */}
         {isSeries && selected.episodes && selected.episodes.length > 0 && (
           <div>
             <h2 style={{ margin: "0 0 16px 0", fontSize: "20px" }}>Episodios</h2>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-              {selected.episodes.map((ep) => {
-                const isActive = currentEpisode?.number === ep.number;
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              {selected.episodes.map((ep, index) => {
+                const epNumber = ep.number || index + 1;
+                const isActive = currentEpisode && (currentEpisode.number === epNumber || currentEpisode === ep);
+
                 return (
                   <div
-                    key={ep.number}
-                    onClick={() => setCurrentEpisode(ep)}
+                    key={index}
+                    onClick={() => setCurrentEpisode({ ...ep, number: epNumber })}
                     style={{
                       display: "flex",
                       alignItems: "center",
@@ -237,33 +228,28 @@ function Catalog({ user }) {
                       backgroundColor: isActive ? "#1a3a5c" : "#1e1e1e",
                       borderRadius: "10px",
                       cursor: "pointer",
-                      border: isActive ? "2px solid #2196F3" : "1px solid #333",
-                      transition: "all 0.2s"
+                      border: isActive ? "2px solid #2196F3" : "1px solid #333"
                     }}
                   >
-                    {/* Miniatura / número */}
-                    <div
-                      style={{
-                        width: "70px",
-                        height: "50px",
-                        backgroundColor: "#333",
-                        borderRadius: "6px",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        fontSize: "20px",
-                        fontWeight: "bold",
-                        color: isActive ? "#64b5f6" : "#aaa",
-                        flexShrink: 0
-                      }}
-                    >
-                      {ep.number}
+                    <div style={{
+                      width: "60px",
+                      height: "45px",
+                      backgroundColor: "#333",
+                      borderRadius: "6px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: "18px",
+                      fontWeight: "bold",
+                      color: isActive ? "#64b5f6" : "#aaa",
+                      flexShrink: 0
+                    }}>
+                      {epNumber}
                     </div>
 
-                    {/* Info del episodio */}
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: "bold", fontSize: "16px", marginBottom: "2px" }}>
-                        Episodio {ep.number}
+                      <div style={{ fontWeight: "bold", fontSize: "15px" }}>
+                        Episodio {epNumber}
                       </div>
                       <div style={{ fontSize: "13px", color: isActive ? "#90caf9" : "#aaa" }}>
                         {isActive ? "Reproduciendo" : (ep.title || "Episodio")}
@@ -279,11 +265,11 @@ function Catalog({ user }) {
     );
   }
 
-  // ================== VISTA DEL CATÁLOGO ==================
+  // ================== CATÁLOGO ==================
   return (
     <div style={{ padding: "20px 16px", maxWidth: "1200px", margin: "0 auto" }}>
       <h1 style={{ marginBottom: "8px", fontSize: "26px" }}>Catálogo</h1>
-      <p style={{ color: "#aaa", marginBottom: "24px", fontSize: "15px" }}>
+      <p style={{ color: "#aaa", marginBottom: "24px" }}>
         Hola {user.displayName}, elige una película o serie
       </p>
 
@@ -292,13 +278,11 @@ function Catalog({ user }) {
       ) : contents.length === 0 ? (
         <p>No hay contenido disponible todavía.</p>
       ) : (
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))",
-            gap: "16px"
-          }}
-        >
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))",
+          gap: "16px"
+        }}>
           {contents.map((item) => {
             const poster = getPoster(item);
             return (
@@ -309,36 +293,21 @@ function Catalog({ user }) {
                   cursor: "pointer",
                   borderRadius: "8px",
                   overflow: "hidden",
-                  backgroundColor: "#1e1e1e",
-                  transition: "transform 0.2s"
+                  backgroundColor: "#1e1e1e"
                 }}
               >
                 {poster ? (
-                  <img
-                    src={poster}
-                    alt={item.title}
-                    style={{ width: "100%", height: "210px", objectFit: "cover" }}
-                  />
+                  <img src={poster} alt={item.title} style={{ width: "100%", height: "210px", objectFit: "cover" }} />
                 ) : (
-                  <div
-                    style={{
-                      width: "100%",
-                      height: "210px",
-                      backgroundColor: "#333",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      color: "#888",
-                      fontSize: "14px"
-                    }}
-                  >
+                  <div style={{
+                    width: "100%", height: "210px", backgroundColor: "#333",
+                    display: "flex", alignItems: "center", justifyContent: "center", color: "#888"
+                  }}>
                     Sin portada
                   </div>
                 )}
                 <div style={{ padding: "10px" }}>
-                  <h3 style={{ margin: "0 0 4px 0", fontSize: "14px", lineHeight: "1.3" }}>
-                    {item.title}
-                  </h3>
+                  <h3 style={{ margin: "0 0 4px 0", fontSize: "14px" }}>{item.title}</h3>
                   <p style={{ margin: 0, fontSize: "12px", color: "#aaa" }}>
                     {item.type === "movie" ? "Película" : `Serie • ${item.episodes?.length || 0} eps`}
                     {item.year && ` • ${item.year}`}
