@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { collection, getDocs } from "firebase/firestore";
+import { collection, getDocs, doc, setDoc, getDoc } from "firebase/firestore";
 import { db } from "../firebase";
 
 function Catalog({ user }) {
@@ -7,6 +7,10 @@ function Catalog({ user }) {
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
   const [currentEpisode, setCurrentEpisode] = useState(null);
+
+  // Calificaciones
+  const [ratings, setRatings] = useState({}); // { contentId: { average, count, userRating } }
+  const [savingRating, setSavingRating] = useState(false);
 
   useEffect(() => {
     const loadContents = async () => {
@@ -17,6 +21,9 @@ function Catalog({ user }) {
           list.push({ id: doc.id, ...doc.data() });
         });
         setContents(list);
+
+        // Cargar calificaciones
+        await loadRatings(list, user.uid);
       } catch (error) {
         console.error("Error al cargar contenido:", error);
       }
@@ -24,8 +31,91 @@ function Catalog({ user }) {
     };
 
     loadContents();
-  }, []);
+  }, [user.uid]);
 
+  const loadRatings = async (contentsList, userId) => {
+    try {
+      const ratingsSnap = await getDocs(collection(db, "ratings"));
+      const allRatings = {};
+
+      ratingsSnap.forEach((docSnap) => {
+        const data = docSnap.data();
+        if (!allRatings[data.contentId]) {
+          allRatings[data.contentId] = [];
+        }
+        allRatings[data.contentId].push(data);
+      });
+
+      const ratingsData = {};
+
+      contentsList.forEach((item) => {
+        const itemRatings = allRatings[item.id] || [];
+        const count = itemRatings.length;
+        const average = count > 0
+          ? itemRatings.reduce((sum, r) => sum + r.rating, 0) / count
+          : 0;
+
+        const userRatingObj = itemRatings.find((r) => r.userId === userId);
+
+        ratingsData[item.id] = {
+          average: Math.round(average * 10) / 10,
+          count,
+          userRating: userRatingObj ? userRatingObj.rating : 0
+        };
+      });
+
+      setRatings(ratingsData);
+    } catch (error) {
+      console.error("Error al cargar calificaciones:", error);
+    }
+  };
+
+  const handleRate = async (contentId, rating) => {
+    if (!user || savingRating) return;
+
+    setSavingRating(true);
+    try {
+      const ratingId = `${contentId}_${user.uid}`;
+      await setDoc(doc(db, "ratings", ratingId), {
+        contentId,
+        userId: user.uid,
+        rating,
+        updatedAt: new Date()
+      });
+
+      // Actualizar localmente
+      setRatings((prev) => {
+        const current = prev[contentId] || { average: 0, count: 0, userRating: 0 };
+        const wasRated = current.userRating > 0;
+        const newCount = wasRated ? current.count : current.count + 1;
+
+        // Recalcular promedio simple
+        let newAverage;
+        if (wasRated) {
+          const total = current.average * current.count - current.userRating + rating;
+          newAverage = total / current.count;
+        } else {
+          const total = current.average * current.count + rating;
+          newAverage = total / newCount;
+        }
+
+        return {
+          ...prev,
+          [contentId]: {
+            average: Math.round(newAverage * 10) / 10,
+            count: newCount,
+            userRating: rating
+          }
+        };
+      });
+    } catch (error) {
+      console.error("Error al calificar:", error);
+      alert("No se pudo guardar la calificación");
+    }
+    setSavingRating(false);
+  };
+
+  // ========== Helpers de video ==========
   const getYoutubeId = (link) => {
     if (!link) return null;
     const match = link.match(
@@ -37,28 +127,18 @@ function Catalog({ user }) {
   const getEmbedUrl = (link) => {
     if (!link) return null;
 
-    // YouTube
     const youtubeId = getYoutubeId(link);
-    if (youtubeId) {
-      return `https://www.youtube.com/embed/${youtubeId}?rel=0`;
-    }
+    if (youtubeId) return `https://www.youtube.com/embed/${youtubeId}?rel=0`;
 
-    // Google Drive
     const driveMatch = link.match(/\/d\/([a-zA-Z0-9_-]+)/);
     if (driveMatch && driveMatch[1]) {
       return `https://drive.google.com/file/d/${driveMatch[1]}/preview`;
     }
 
-    // Internet Archive
     if (link.includes("archive.org")) {
-      if (link.includes("/details/")) {
-        return link.replace("/details/", "/embed/");
-      }
-      if (link.includes("/embed/")) {
-        return link;
-      }
-      const identifier = link.split("/").pop();
-      return `https://archive.org/embed/${identifier}`;
+      if (link.includes("/details/")) return link.replace("/details/", "/embed/");
+      if (link.includes("/embed/")) return link;
+      return `https://archive.org/embed/${link.split("/").pop()}`;
     }
 
     return null;
@@ -68,27 +148,21 @@ function Catalog({ user }) {
 
   const getPoster = (item) => {
     if (item.poster) return item.poster;
-
     if (item.driveLink) {
       const youtubeId = getYoutubeId(item.driveLink);
       if (youtubeId) return `https://img.youtube.com/vi/${youtubeId}/maxresdefault.jpg`;
     }
-
-    if (item.episodes && item.episodes.length > 0) {
+    if (item.episodes?.length > 0) {
       const youtubeId = getYoutubeId(item.episodes[0].link);
       if (youtubeId) return `https://img.youtube.com/vi/${youtubeId}/maxresdefault.jpg`;
     }
-
     return null;
   };
 
   const handleSelect = (item) => {
     setSelected(item);
-
-    if (item.type === "series" && item.episodes && item.episodes.length > 0) {
-      // Aseguramos que el primer episodio tenga número
-      const first = { ...item.episodes[0], number: item.episodes[0].number || 1 };
-      setCurrentEpisode(first);
+    if (item.type === "series" && item.episodes?.length > 0) {
+      setCurrentEpisode({ ...item.episodes[0], number: item.episodes[0].number || 1 });
     } else {
       setCurrentEpisode(null);
     }
@@ -99,6 +173,43 @@ function Catalog({ user }) {
     setCurrentEpisode(null);
   };
 
+  // Componente de estrellas
+  const Stars = ({ contentId, size = 22, interactive = false }) => {
+    const data = ratings[contentId] || { average: 0, count: 0, userRating: 0 };
+    const displayRating = interactive ? (data.userRating || 0) : data.average;
+
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: "4px", flexWrap: "wrap" }}>
+        {[1, 2, 3, 4, 5].map((star) => (
+          <span
+            key={star}
+            onClick={interactive ? () => handleRate(contentId, star) : undefined}
+            style={{
+              fontSize: size,
+              cursor: interactive ? "pointer" : "default",
+              color: star <= Math.round(displayRating) ? "#FFD700" : "#555",
+              transition: "color 0.15s",
+              userSelect: "none"
+            }}
+            title={interactive ? `Calificar con ${star} estrella${star > 1 ? "s" : ""}` : ""}
+          >
+            ★
+          </span>
+        ))}
+        {!interactive && data.count > 0 && (
+          <span style={{ fontSize: "13px", color: "#aaa", marginLeft: "6px" }}>
+            {data.average} ({data.count})
+          </span>
+        )}
+        {interactive && data.userRating > 0 && (
+          <span style={{ fontSize: "13px", color: "#4CAF50", marginLeft: "8px" }}>
+            Tu calificación: {data.userRating}
+          </span>
+        )}
+      </div>
+    );
+  };
+
   // ================== VISTA DE REPRODUCCIÓN ==================
   if (selected) {
     const isSeries = selected.type === "series";
@@ -107,7 +218,6 @@ function Catalog({ user }) {
 
     return (
       <div style={{ padding: "16px", maxWidth: "1200px", margin: "0 auto", color: "#fff" }}>
-        
         <button
           onClick={handleBack}
           style={{
@@ -135,10 +245,24 @@ function Catalog({ user }) {
           </p>
         )}
 
-        <p style={{ color: "#aaa", margin: "0 0 16px 0", fontSize: "14px" }}>
+        <p style={{ color: "#aaa", margin: "0 0 12px 0", fontSize: "14px" }}>
           {selected.type === "movie" ? "Película" : "Serie"}
           {selected.year && ` • ${selected.year}`}
         </p>
+
+        {/* CALIFICACIÓN */}
+        <div style={{ marginBottom: "18px" }}>
+          <p style={{ margin: "0 0 6px 0", fontSize: "14px", color: "#ccc" }}>
+            Califica esta {selected.type === "movie" ? "película" : "serie"}:
+          </p>
+          <Stars contentId={selected.id} size={28} interactive={true} />
+          {(ratings[selected.id]?.count || 0) > 0 && (
+            <p style={{ margin: "6px 0 0 0", fontSize: "13px", color: "#aaa" }}>
+              Promedio: {ratings[selected.id].average} / 5 ({ratings[selected.id].count} calificación
+              {ratings[selected.id].count !== 1 ? "es" : ""})
+            </p>
+          )}
+        </div>
 
         {selected.description && (
           <p style={{ marginBottom: "20px", color: "#ccc", fontSize: "15px", lineHeight: "1.5" }}>
@@ -195,26 +319,23 @@ function Catalog({ user }) {
             </div>
           ) : (
             <div style={{ padding: "40px", textAlign: "center", color: "#888", backgroundColor: "#111", borderRadius: "8px", marginBottom: "30px" }}>
-              No se pudo cargar el video<br/>
-              <small style={{ color: "#666" }}>Enlace no compatible</small>
+              No se pudo cargar el video
             </div>
           )
         ) : (
           <div style={{ padding: "40px", textAlign: "center", color: "#888", backgroundColor: "#111", borderRadius: "8px", marginBottom: "30px" }}>
-            No hay video disponible<br/>
-            <small style={{ color: "#666" }}>Este episodio no tiene enlace</small>
+            No hay video disponible
           </div>
         )}
 
-        {/* LISTA DE EPISODIOS */}
-        {isSeries && selected.episodes && selected.episodes.length > 0 && (
+        {/* EPISODIOS */}
+        {isSeries && selected.episodes?.length > 0 && (
           <div>
             <h2 style={{ margin: "0 0 16px 0", fontSize: "20px" }}>Episodios</h2>
-
             <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
               {selected.episodes.map((ep, index) => {
                 const epNumber = ep.number || index + 1;
-                const isActive = currentEpisode && (currentEpisode.number === epNumber || currentEpisode === ep);
+                const isActive = currentEpisode && currentEpisode.number === epNumber;
 
                 return (
                   <div
@@ -246,7 +367,6 @@ function Catalog({ user }) {
                     }}>
                       {epNumber}
                     </div>
-
                     <div style={{ flex: 1 }}>
                       <div style={{ fontWeight: "bold", fontSize: "15px" }}>
                         Episodio {epNumber}
@@ -285,6 +405,8 @@ function Catalog({ user }) {
         }}>
           {contents.map((item) => {
             const poster = getPoster(item);
+            const ratingData = ratings[item.id];
+
             return (
               <div
                 key={item.id}
@@ -308,10 +430,18 @@ function Catalog({ user }) {
                 )}
                 <div style={{ padding: "10px" }}>
                   <h3 style={{ margin: "0 0 4px 0", fontSize: "14px" }}>{item.title}</h3>
-                  <p style={{ margin: 0, fontSize: "12px", color: "#aaa" }}>
+                  <p style={{ margin: "0 0 6px 0", fontSize: "12px", color: "#aaa" }}>
                     {item.type === "movie" ? "Película" : `Serie • ${item.episodes?.length || 0} eps`}
                     {item.year && ` • ${item.year}`}
                   </p>
+                  {ratingData && ratingData.count > 0 && (
+                    <div style={{ fontSize: "13px", color: "#FFD700" }}>
+                      {"★".repeat(Math.round(ratingData.average))}
+                      <span style={{ color: "#aaa", marginLeft: "4px" }}>
+                        {ratingData.average}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
             );
