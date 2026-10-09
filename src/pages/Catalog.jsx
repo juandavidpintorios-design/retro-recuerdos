@@ -15,6 +15,7 @@ function Catalog({ user }) {
 
     const loadData = async () => {
       try {
+        // Cargar contenido
         const contentSnap = await getDocs(collection(db, "content"));
         const list = [];
         contentSnap.forEach((docSnap) => {
@@ -35,20 +36,21 @@ function Catalog({ user }) {
         list.forEach((item) => {
           const itemRatings = allRatings[item.id] || [];
           const count = itemRatings.length;
-          const average = count > 0
-            ? itemRatings.reduce((sum, r) => sum + r.rating, 0) / count
-            : 0;
+          const average =
+            count > 0
+              ? itemRatings.reduce((sum, r) => sum + Number(r.rating), 0) / count
+              : 0;
           const userRatingObj = itemRatings.find((r) => r.userId === user.uid);
 
           ratingsData[item.id] = {
             average: Math.round(average * 10) / 10,
             count,
-            userRating: userRatingObj ? userRatingObj.rating : 0
+            userRating: userRatingObj ? Number(userRatingObj.rating) : 0
           };
         });
         setRatings(ratingsData);
       } catch (error) {
-        console.error(error);
+        console.error("Error cargando datos:", error);
       }
       setLoading(false);
     };
@@ -56,6 +58,65 @@ function Catalog({ user }) {
     loadData();
   }, [user?.uid]);
 
+  // ===== Helpers de video =====
+  const getYoutubeId = (link) => {
+    if (!link) return null;
+    const match = link.match(
+      /(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/
+    );
+    return match ? match[1] : null;
+  };
+
+  const getEmbedUrl = (link) => {
+    if (!link) return null;
+
+    // YouTube
+    const youtubeId = getYoutubeId(link);
+    if (youtubeId) {
+      return `https://www.youtube.com/embed/${youtubeId}?rel=0`;
+    }
+
+    // Google Drive
+    const driveMatch = link.match(/\/d\/([a-zA-Z0-9_-]+)/);
+    if (driveMatch && driveMatch[1]) {
+      return `https://drive.google.com/file/d/${driveMatch[1]}/preview`;
+    }
+
+    // Internet Archive
+    if (link.includes("archive.org")) {
+      if (link.includes("/details/")) {
+        return link.replace("/details/", "/embed/");
+      }
+      if (link.includes("/embed/")) {
+        return link;
+      }
+      const parts = link.split("/");
+      const identifier = parts[parts.length - 1] || parts[parts.length - 2];
+      return `https://archive.org/embed/${identifier}`;
+    }
+
+    return null;
+  };
+
+  const isMegaLink = (link) => link && link.includes("mega.nz");
+
+  const getPoster = (item) => {
+    if (item.poster) return item.poster;
+
+    if (item.driveLink) {
+      const youtubeId = getYoutubeId(item.driveLink);
+      if (youtubeId) return `https://img.youtube.com/vi/${youtubeId}/maxresdefault.jpg`;
+    }
+
+    if (item.episodes && item.episodes.length > 0) {
+      const youtubeId = getYoutubeId(item.episodes[0].link);
+      if (youtubeId) return `https://img.youtube.com/vi/${youtubeId}/maxresdefault.jpg`;
+    }
+
+    return null;
+  };
+
+  // ===== Calificaciones =====
   const handleRate = async (contentId, rating) => {
     if (!user || savingRating) return;
     setSavingRating(true);
@@ -65,7 +126,7 @@ function Catalog({ user }) {
       await setDoc(doc(db, "ratings", ratingId), {
         contentId,
         userId: user.uid,
-        rating,
+        rating: Number(rating),
         updatedAt: new Date()
       });
 
@@ -73,8 +134,8 @@ function Catalog({ user }) {
         const current = prev[contentId] || { average: 0, count: 0, userRating: 0 };
         const wasRated = current.userRating > 0;
         const newCount = wasRated ? current.count : current.count + 1;
-        let newAverage;
 
+        let newAverage;
         if (wasRated) {
           const total = current.average * current.count - current.userRating + rating;
           newAverage = total / current.count;
@@ -93,7 +154,7 @@ function Catalog({ user }) {
         };
       });
     } catch (error) {
-      console.error(error);
+      console.error("Error al calificar:", error);
       alert("No se pudo guardar la calificación. Revisa las reglas de Firestore.");
     }
     setSavingRating(false);
@@ -108,7 +169,11 @@ function Catalog({ user }) {
         {[1, 2, 3, 4, 5].map((star) => (
           <span
             key={star}
-            onClick={interactive && !savingRating ? () => handleRate(contentId, star) : undefined}
+            onClick={
+              interactive && !savingRating
+                ? () => handleRate(contentId, star)
+                : undefined
+            }
             style={{
               fontSize: size,
               cursor: interactive && !savingRating ? "pointer" : "default",
@@ -135,7 +200,7 @@ function Catalog({ user }) {
 
   const handleSelect = (item) => {
     setSelected(item);
-    if (item.type === "series" && item.episodes?.length > 0) {
+    if (item.type === "series" && item.episodes && item.episodes.length > 0) {
       setCurrentEpisode({
         ...item.episodes[0],
         number: item.episodes[0].number || 1
@@ -150,7 +215,7 @@ function Catalog({ user }) {
     setCurrentEpisode(null);
   };
 
-  // Vista de reproducción
+  // ================== VISTA DE REPRODUCCIÓN ==================
   if (selected) {
     const isSeries = selected.type === "series";
     const videoLink = isSeries ? currentEpisode?.link : selected.driveLink;
@@ -167,16 +232,19 @@ function Catalog({ user }) {
             color: "white",
             border: "none",
             borderRadius: "6px",
-            cursor: "pointer"
+            cursor: "pointer",
+            fontSize: "15px"
           }}
         >
           ← Volver al catálogo
         </button>
 
-        <h1 style={{ margin: "0 0 8px 0", fontSize: "22px" }}>{selected.title}</h1>
+        <h1 style={{ margin: "0 0 8px 0", fontSize: "22px", lineHeight: "1.3" }}>
+          {selected.title}
+        </h1>
 
         {isSeries && currentEpisode && (
-          <p style={{ color: "#4CAF50", margin: "0 0 6px 0" }}>
+          <p style={{ color: "#4CAF50", margin: "0 0 6px 0", fontSize: "16px" }}>
             Episodio {currentEpisode.number || "?"}
             {currentEpisode.title ? `: ${currentEpisode.title}` : ""}
           </p>
@@ -188,29 +256,43 @@ function Catalog({ user }) {
         </p>
 
         {/* Calificación */}
-        <div style={{ marginBottom: "16px" }}>
+        <div style={{ marginBottom: "18px" }}>
           <p style={{ margin: "0 0 6px 0", fontSize: "14px", color: "#ccc" }}>
             Califica esta {selected.type === "movie" ? "película" : "serie"}:
           </p>
           <Stars contentId={selected.id} size={28} interactive={true} />
+          {(ratings[selected.id]?.count || 0) > 0 && (
+            <p style={{ margin: "6px 0 0 0", fontSize: "13px", color: "#aaa" }}>
+              Promedio: {ratings[selected.id].average} / 5 (
+              {ratings[selected.id].count} calificación
+              {ratings[selected.id].count !== 1 ? "es" : ""})
+            </p>
+          )}
         </div>
 
         {selected.description && (
-          <p style={{ marginBottom: "20px", color: "#ccc" }}>{selected.description}</p>
+          <p style={{ marginBottom: "20px", color: "#ccc", fontSize: "15px", lineHeight: "1.5" }}>
+            {selected.description}
+          </p>
         )}
 
         {/* Reproductor */}
         {videoLink ? (
           isMegaLink(videoLink) ? (
-            <div style={{
-              padding: "50px 20px",
-              backgroundColor: "#111",
-              borderRadius: "12px",
-              textAlign: "center",
-              marginBottom: "30px",
-              border: "1px solid #333"
-            }}>
+            <div
+              style={{
+                padding: "50px 20px",
+                backgroundColor: "#111",
+                borderRadius: "12px",
+                textAlign: "center",
+                marginBottom: "30px",
+                border: "1px solid #333"
+              }}
+            >
               <h3 style={{ marginBottom: "10px" }}>Este contenido está en Mega</h3>
+              <p style={{ color: "#aaa", marginBottom: "20px" }}>
+                Haz clic para verlo o descargarlo
+              </p>
               <a
                 href={videoLink}
                 target="_blank"
@@ -230,41 +312,74 @@ function Catalog({ user }) {
               </a>
             </div>
           ) : embedUrl ? (
-            <div style={{
-              position: "relative",
-              paddingBottom: "56.25%",
-              height: 0,
-              overflow: "hidden",
-              borderRadius: "10px",
-              backgroundColor: "#000",
-              marginBottom: "30px"
-            }}>
+            <div
+              style={{
+                position: "relative",
+                paddingBottom: "56.25%",
+                height: 0,
+                overflow: "hidden",
+                borderRadius: "10px",
+                backgroundColor: "#000",
+                marginBottom: "30px"
+              }}
+            >
               <iframe
                 src={embedUrl}
-                style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", border: "none" }}
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  width: "100%",
+                  height: "100%",
+                  border: "none"
+                }}
                 allow="autoplay; encrypted-media; fullscreen"
                 allowFullScreen
               ></iframe>
             </div>
           ) : (
-            <div style={{ padding: "40px", textAlign: "center", color: "#888", backgroundColor: "#111", borderRadius: "8px", marginBottom: "30px" }}>
+            <div
+              style={{
+                padding: "40px",
+                textAlign: "center",
+                color: "#888",
+                backgroundColor: "#111",
+                borderRadius: "8px",
+                marginBottom: "30px"
+              }}
+            >
               No se pudo cargar el video
+              <br />
+              <small style={{ color: "#666" }}>Enlace no compatible o inválido</small>
             </div>
           )
         ) : (
-          <div style={{ padding: "40px", textAlign: "center", color: "#888", backgroundColor: "#111", borderRadius: "8px", marginBottom: "30px" }}>
+          <div
+            style={{
+              padding: "40px",
+              textAlign: "center",
+              color: "#888",
+              backgroundColor: "#111",
+              borderRadius: "8px",
+              marginBottom: "30px"
+            }}
+          >
             No hay video disponible
+            <br />
+            <small style={{ color: "#666" }}>
+              Este episodio/película no tiene enlace
+            </small>
           </div>
         )}
 
-        {/* Episodios */}
-        {isSeries && selected.episodes?.length > 0 && (
+        {/* Lista de episodios */}
+        {isSeries && selected.episodes && selected.episodes.length > 0 && (
           <div>
             <h2 style={{ margin: "0 0 16px 0", fontSize: "20px" }}>Episodios</h2>
             <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
               {selected.episodes.map((ep, index) => {
                 const epNumber = ep.number || index + 1;
-                const isActive = currentEpisode?.number === epNumber;
+                const isActive = currentEpisode && currentEpisode.number === epNumber;
 
                 return (
                   <div
@@ -281,27 +396,34 @@ function Catalog({ user }) {
                       border: isActive ? "2px solid #2196F3" : "1px solid #333"
                     }}
                   >
-                    <div style={{
-                      width: "60px",
-                      height: "45px",
-                      backgroundColor: "#333",
-                      borderRadius: "6px",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      fontSize: "18px",
-                      fontWeight: "bold",
-                      color: isActive ? "#64b5f6" : "#aaa",
-                      flexShrink: 0
-                    }}>
+                    <div
+                      style={{
+                        width: "60px",
+                        height: "45px",
+                        backgroundColor: "#333",
+                        borderRadius: "6px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: "18px",
+                        fontWeight: "bold",
+                        color: isActive ? "#64b5f6" : "#aaa",
+                        flexShrink: 0
+                      }}
+                    >
                       {epNumber}
                     </div>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontWeight: "bold", fontSize: "15px" }}>
                         Episodio {epNumber}
                       </div>
-                      <div style={{ fontSize: "13px", color: isActive ? "#90caf9" : "#aaa" }}>
-                        {isActive ? "Reproduciendo" : (ep.title || "Episodio")}
+                      <div
+                        style={{
+                          fontSize: "13px",
+                          color: isActive ? "#90caf9" : "#aaa"
+                        }}
+                      >
+                        {isActive ? "Reproduciendo" : ep.title || "Episodio"}
                       </div>
                     </div>
                   </div>
@@ -314,9 +436,9 @@ function Catalog({ user }) {
     );
   }
 
-  // Catálogo
+  // ================== CATÁLOGO ==================
   return (
-    <div style={{ padding: "20px 16px", maxWidth: "1200px", margin: "0 auto" }}>
+    <div style={{ padding: "20px 16px", maxWidth: "1200px", margin: "0 auto", color: "#fff" }}>
       <h1 style={{ marginBottom: "8px", fontSize: "26px" }}>Catálogo</h1>
       <p style={{ color: "#aaa", marginBottom: "24px" }}>
         Hola {user.displayName}, elige una película o serie
@@ -327,13 +449,17 @@ function Catalog({ user }) {
       ) : contents.length === 0 ? (
         <p>No hay contenido disponible todavía.</p>
       ) : (
-        <div style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))",
-          gap: "16px"
-        }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))",
+            gap: "16px"
+          }}
+        >
           {contents.map((item) => {
             const poster = getPoster(item);
+            const ratingData = ratings[item.id];
+
             return (
               <div
                 key={item.id}
@@ -346,21 +472,42 @@ function Catalog({ user }) {
                 }}
               >
                 {poster ? (
-                  <img src={poster} alt={item.title} style={{ width: "100%", height: "210px", objectFit: "cover" }} />
+                  <img
+                    src={poster}
+                    alt={item.title}
+                    style={{ width: "100%", height: "210px", objectFit: "cover" }}
+                  />
                 ) : (
-                  <div style={{
-                    width: "100%", height: "210px", backgroundColor: "#333",
-                    display: "flex", alignItems: "center", justifyContent: "center", color: "#888"
-                  }}>
+                  <div
+                    style={{
+                      width: "100%",
+                      height: "210px",
+                      backgroundColor: "#333",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      color: "#888"
+                    }}
+                  >
                     Sin portada
                   </div>
                 )}
                 <div style={{ padding: "10px" }}>
                   <h3 style={{ margin: "0 0 4px 0", fontSize: "14px" }}>{item.title}</h3>
-                  <p style={{ margin: 0, fontSize: "12px", color: "#aaa" }}>
-                    {item.type === "movie" ? "Película" : `Serie • ${item.episodes?.length || 0} eps`}
+                  <p style={{ margin: "0 0 6px 0", fontSize: "12px", color: "#aaa" }}>
+                    {item.type === "movie"
+                      ? "Película"
+                      : `Serie • ${item.episodes?.length || 0} eps`}
                     {item.year && ` • ${item.year}`}
                   </p>
+                  {ratingData && ratingData.count > 0 && (
+                    <div style={{ fontSize: "13px", color: "#FFD700" }}>
+                      {"★".repeat(Math.round(ratingData.average))}
+                      <span style={{ color: "#aaa", marginLeft: "4px" }}>
+                        {ratingData.average}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
             );
