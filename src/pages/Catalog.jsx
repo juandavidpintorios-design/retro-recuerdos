@@ -2,32 +2,46 @@ import { useState, useEffect } from "react";
 import { collection, getDocs } from "firebase/firestore";
 import { db } from "../firebase";
 
-function Catalog({ user, onLogout, onGoAdmin }) {
-  const [content, setContent] = useState([]);
+function Catalog({ user }) {
+  const [contents, setContents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
-  const [selectedEpisode, setSelectedEpisode] = useState(null);
+  const [currentEpisode, setCurrentEpisode] = useState(null);
 
   useEffect(() => {
-    const loadContent = async () => {
+    const loadContents = async () => {
       try {
         const querySnapshot = await getDocs(collection(db, "content"));
         const list = [];
         querySnapshot.forEach((doc) => {
           list.push({ id: doc.id, ...doc.data() });
         });
-        setContent(list);
+        setContents(list);
       } catch (error) {
-        console.error("Error cargando contenido:", error);
+        console.error("Error al cargar contenido:", error);
       }
       setLoading(false);
     };
-    loadContent();
+
+    loadContents();
   }, []);
 
-  // Convertir cualquier enlace a formato de visualización
+  const getYoutubeId = (link) => {
+    if (!link) return null;
+    const match = link.match(
+      /(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/
+    );
+    return match ? match[1] : null;
+  };
+
   const getEmbedUrl = (link) => {
     if (!link) return null;
+
+    // YouTube
+    const youtubeId = getYoutubeId(link);
+    if (youtubeId) {
+      return `https://www.youtube.com/embed/${youtubeId}?rel=0`;
+    }
 
     // Google Drive
     const driveMatch = link.match(/\/d\/([a-zA-Z0-9_-]+)/);
@@ -35,296 +49,306 @@ function Catalog({ user, onLogout, onGoAdmin }) {
       return `https://drive.google.com/file/d/${driveMatch[1]}/preview`;
     }
 
-    // Archive.org
-    if (link.includes("archive.org/details/")) {
-      const id = link.split("archive.org/details/")[1].split("/")[0].split("?")[0];
-      return `https://archive.org/embed/${id}`;
+    // Internet Archive
+    if (link.includes("archive.org")) {
+      if (link.includes("/details/")) {
+        return link.replace("/details/", "/embed/");
+      }
+      if (link.includes("/embed/")) {
+        return link;
+      }
+      const identifier = link.split("/").pop();
+      return `https://archive.org/embed/${identifier}`;
     }
 
-    // Si ya es un enlace de embed o directo
-    return link;
+    return null;
   };
 
-  if (loading) {
-    return (
-      <div style={{ textAlign: "center", marginTop: "80px", color: "white", backgroundColor: "#111", minHeight: "100vh" }}>
-        <h2>Cargando catálogo...</h2>
-      </div>
-    );
-  }
+  const isMegaLink = (link) => {
+    return link && link.includes("mega.nz");
+  };
 
-  // ===== REPRODUCTOR =====
+  const getPoster = (item) => {
+    if (item.poster) return item.poster;
+
+    if (item.driveLink) {
+      const youtubeId = getYoutubeId(item.driveLink);
+      if (youtubeId) return `https://img.youtube.com/vi/${youtubeId}/maxresdefault.jpg`;
+    }
+
+    if (item.episodes && item.episodes.length > 0) {
+      const youtubeId = getYoutubeId(item.episodes[0].link);
+      if (youtubeId) return `https://img.youtube.com/vi/${youtubeId}/maxresdefault.jpg`;
+    }
+
+    return null;
+  };
+
+  const handleSelect = (item) => {
+    setSelected(item);
+    if (item.type === "series" && item.episodes && item.episodes.length > 0) {
+      setCurrentEpisode(item.episodes[0]);
+    } else {
+      setCurrentEpisode(null);
+    }
+  };
+
+  const handleBack = () => {
+    setSelected(null);
+    setCurrentEpisode(null);
+  };
+
+  // ================== VISTA DE REPRODUCCIÓN ==================
   if (selected) {
-    const isSeries = selected.type === "series" && selected.episodes && selected.episodes.length > 0;
-    const currentVideo = selectedEpisode || (isSeries ? selected.episodes[0] : selected);
-    const embedUrl = currentVideo ? getEmbedUrl(currentVideo.driveLink || currentVideo.link) : null;
+    const isSeries = selected.type === "series";
+    const videoLink = isSeries ? currentEpisode?.link : selected.driveLink;
+    const embedUrl = getEmbedUrl(videoLink);
 
     return (
-      <div style={{ minHeight: "100vh", backgroundColor: "#0d0d0d", color: "white" }}>
-        {/* Header */}
-        <div style={{
-          padding: "12px 24px",
-          backgroundColor: "#1a1a1a",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          borderBottom: "1px solid #333"
-        }}>
-          <button
-            onClick={() => {
-              setSelected(null);
-              setSelectedEpisode(null);
-            }}
-            style={{
-              padding: "8px 16px",
-              backgroundColor: "#333",
-              color: "white",
-              border: "none",
-              borderRadius: "4px",
-              cursor: "pointer"
-            }}
-          >
-            ← Volver al catálogo
-          </button>
-          <h2 style={{ margin: 0, fontSize: "18px" }}>{selected.title}</h2>
-          <div style={{ width: "120px" }}></div>
-        </div>
+      <div style={{ padding: "16px", maxWidth: "1200px", margin: "0 auto", color: "#fff" }}>
+        
+        {/* Botón volver */}
+        <button
+          onClick={handleBack}
+          style={{
+            marginBottom: "16px",
+            padding: "10px 18px",
+            backgroundColor: "#333",
+            color: "white",
+            border: "none",
+            borderRadius: "6px",
+            cursor: "pointer",
+            fontSize: "15px"
+          }}
+        >
+          ← Volver al catálogo
+        </button>
 
-        {/* Contenido principal: Video + Lista de episodios */}
-        <div style={{
-          display: "flex",
-          height: "calc(100vh - 60px)",
-          overflow: "hidden"
-        }}>
-          {/* Video (lado izquierdo) */}
-          <div style={{
-            flex: 1,
-            display: "flex",
-            flexDirection: "column",
-            backgroundColor: "#000"
-          }}>
-            <div style={{ flex: 1, position: "relative" }}>
-              {embedUrl ? (
-                <iframe
-                  src={embedUrl}
-                  width="100%"
-                  height="100%"
-                  allow="autoplay; fullscreen"
-                  allowFullScreen
-                  style={{ border: "none", position: "absolute", top: 0, left: 0 }}
-                  title={selected.title}
-                ></iframe>
-              ) : (
-                <div style={{
-                  height: "100%",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  color: "#888"
-                }}>
-                  {isSeries ? "Selecciona un episodio" : "No hay video disponible"}
-                </div>
-              )}
+        {/* Título y datos */}
+        <h1 style={{ margin: "0 0 8px 0", fontSize: "24px", lineHeight: "1.3" }}>
+          {selected.title}
+        </h1>
+
+        {isSeries && currentEpisode && (
+          <p style={{ color: "#4CAF50", margin: "0 0 6px 0", fontSize: "16px" }}>
+            Episodio {currentEpisode.number}
+            {currentEpisode.title && `: ${currentEpisode.title}`}
+          </p>
+        )}
+
+        <p style={{ color: "#aaa", margin: "0 0 16px 0", fontSize: "14px" }}>
+          {selected.type === "movie" ? "Película" : "Serie"}
+          {selected.year && ` • ${selected.year}`}
+        </p>
+
+        {selected.description && (
+          <p style={{ marginBottom: "20px", color: "#ccc", fontSize: "15px", lineHeight: "1.5" }}>
+            {selected.description}
+          </p>
+        )}
+
+        {/* ========== REPRODUCTOR ========== */}
+        {videoLink ? (
+          isMegaLink(videoLink) ? (
+            <div
+              style={{
+                padding: "50px 20px",
+                backgroundColor: "#111",
+                borderRadius: "12px",
+                textAlign: "center",
+                marginBottom: "30px",
+                border: "1px solid #333"
+              }}
+            >
+              <h3 style={{ marginBottom: "10px" }}>Este contenido está en Mega</h3>
+              <p style={{ color: "#aaa", marginBottom: "20px" }}>Haz clic para verlo o descargarlo</p>
+              <a
+                href={videoLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: "inline-block",
+                  padding: "14px 32px",
+                  backgroundColor: "#D9272E",
+                  color: "white",
+                  fontSize: "17px",
+                  fontWeight: "bold",
+                  borderRadius: "8px",
+                  textDecoration: "none"
+                }}
+              >
+                Ver en Mega
+              </a>
             </div>
+          ) : embedUrl ? (
+            <div
+              style={{
+                position: "relative",
+                paddingBottom: "56.25%",
+                height: 0,
+                overflow: "hidden",
+                borderRadius: "10px",
+                backgroundColor: "#000",
+                marginBottom: "30px"
+              }}
+            >
+              <iframe
+                src={embedUrl}
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  width: "100%",
+                  height: "100%",
+                  border: "none"
+                }}
+                allow="autoplay; encrypted-media; fullscreen"
+                allowFullScreen
+              ></iframe>
+            </div>
+          ) : (
+            <div style={{ padding: "40px", textAlign: "center", color: "#888", backgroundColor: "#111", borderRadius: "8px", marginBottom: "30px" }}>
+              No se pudo cargar el video
+            </div>
+          )
+        ) : (
+          <div style={{ padding: "40px", textAlign: "center", color: "#888", backgroundColor: "#111", borderRadius: "8px", marginBottom: "30px" }}>
+            No hay video disponible
           </div>
+        )}
 
-          {/* Lista de episodios (lado derecho) - solo si es serie */}
-          {isSeries && (
-            <div style={{
-              width: "340px",
-              backgroundColor: "#1a1a1a",
-              borderLeft: "1px solid #333",
-              display: "flex",
-              flexDirection: "column",
-              overflow: "hidden"
-            }}>
-              <div style={{
-                padding: "16px 20px",
-                borderBottom: "1px solid #333",
-                fontWeight: "bold",
-                fontSize: "16px"
-              }}>
-                EPISODIOS
-              </div>
+        {/* ========== LISTA DE EPISODIOS (abajo) ========== */}
+        {isSeries && selected.episodes && selected.episodes.length > 0 && (
+          <div>
+            <h2 style={{ margin: "0 0 16px 0", fontSize: "20px" }}>Episodios</h2>
 
-              <div style={{ flex: 1, overflowY: "auto", padding: "10px" }}>
-                {selected.episodes.map((ep, index) => {
-                  const isActive = selectedEpisode === ep || (!selectedEpisode && index === 0);
-                  return (
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              {selected.episodes.map((ep) => {
+                const isActive = currentEpisode?.number === ep.number;
+                return (
+                  <div
+                    key={ep.number}
+                    onClick={() => setCurrentEpisode(ep)}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "14px",
+                      padding: "12px",
+                      backgroundColor: isActive ? "#1a3a5c" : "#1e1e1e",
+                      borderRadius: "10px",
+                      cursor: "pointer",
+                      border: isActive ? "2px solid #2196F3" : "1px solid #333",
+                      transition: "all 0.2s"
+                    }}
+                  >
+                    {/* Miniatura / número */}
                     <div
-                      key={index}
-                      onClick={() => setSelectedEpisode(ep)}
                       style={{
-                        display: "flex",
-                        gap: "12px",
-                        padding: "10px",
-                        borderRadius: "8px",
-                        cursor: "pointer",
-                        backgroundColor: isActive ? "#2a2a2a" : "transparent",
-                        marginBottom: "6px",
-                        border: isActive ? "1px solid #444" : "1px solid transparent"
-                      }}
-                    >
-                      {/* Miniatura / número */}
-                      <div style={{
-                        width: "100px",
-                        height: "56px",
+                        width: "70px",
+                        height: "50px",
                         backgroundColor: "#333",
-                        borderRadius: "4px",
+                        borderRadius: "6px",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
-                        flexShrink: 0,
-                        position: "relative",
-                        overflow: "hidden"
-                      }}>
-                        {selected.poster ? (
-                          <img
-                            src={selected.poster}
-                            alt=""
-                            style={{ width: "100%", height: "100%", objectFit: "cover", opacity: 0.7 }}
-                          />
-                        ) : null}
-                        <span style={{
-                          position: "absolute",
-                          fontSize: "18px",
-                          fontWeight: "bold",
-                          color: "white",
-                          textShadow: "0 1px 3px black"
-                        }}>
-                          {index + 1}
-                        </span>
-                      </div>
+                        fontSize: "20px",
+                        fontWeight: "bold",
+                        color: isActive ? "#64b5f6" : "#aaa",
+                        flexShrink: 0
+                      }}
+                    >
+                      {ep.number}
+                    </div>
 
-                      {/* Info del episodio */}
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{
-                          fontSize: "14px",
-                          fontWeight: isActive ? "600" : "400",
-                          whiteSpace: "nowrap",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis"
-                        }}>
-                          {ep.title || `Episodio ${index + 1}`}
-                        </div>
-                        <div style={{ fontSize: "12px", color: "#888", marginTop: "4px" }}>
-                          {isActive ? "Reproduciendo" : "Episodio"}
-                        </div>
+                    {/* Info del episodio */}
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: "bold", fontSize: "16px", marginBottom: "2px" }}>
+                        Episodio {ep.number}
+                      </div>
+                      <div style={{ fontSize: "13px", color: isActive ? "#90caf9" : "#aaa" }}>
+                        {isActive ? "Reproduciendo" : (ep.title || "Episodio")}
                       </div>
                     </div>
-                  );
-                })}
-              </div>
+                  </div>
+                );
+              })}
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     );
   }
 
-  // ===== CATÁLOGO =====
+  // ================== VISTA DEL CATÁLOGO ==================
   return (
-    <div style={{ minHeight: "100vh", backgroundColor: "#111", color: "white" }}>
-      {/* Header */}
-      <div style={{
-        padding: "15px 30px",
-        backgroundColor: "#1a1a1a",
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        borderBottom: "1px solid #333"
-      }}>
-        <h2 style={{ margin: 0 }}>Retro Recuerdos</h2>
-        <div style={{ display: "flex", alignItems: "center", gap: "15px" }}>
-          <span>Hola, {user.displayName}</span>
-          {user.role === "admin" && (
-            <button
-              onClick={onGoAdmin}
-              style={{
-                padding: "8px 16px",
-                backgroundColor: "#2196F3",
-                color: "white",
-                border: "none",
-                borderRadius: "4px",
-                cursor: "pointer"
-              }}
-            >
-              Panel Admin
-            </button>
-          )}
-          <button
-            onClick={onLogout}
-            style={{
-              padding: "8px 16px",
-              backgroundColor: "#f44336",
-              color: "white",
-              border: "none",
-              borderRadius: "4px",
-              cursor: "pointer"
-            }}
-          >
-            Cerrar sesión
-          </button>
-        </div>
-      </div>
+    <div style={{ padding: "20px 16px", maxWidth: "1200px", margin: "0 auto" }}>
+      <h1 style={{ marginBottom: "8px", fontSize: "26px" }}>Catálogo</h1>
+      <p style={{ color: "#aaa", marginBottom: "24px", fontSize: "15px" }}>
+        Hola {user.displayName}, elige una película o serie
+      </p>
 
-      <div style={{ padding: "30px" }}>
-        <h1 style={{ marginBottom: "30px" }}>Catálogo</h1>
-
-        {content.length === 0 ? (
-          <p style={{ color: "#aaa" }}>Todavía no hay películas ni series agregadas.</p>
-        ) : (
-          <div style={{
+      {loading ? (
+        <p>Cargando contenido...</p>
+      ) : contents.length === 0 ? (
+        <p>No hay contenido disponible todavía.</p>
+      ) : (
+        <div
+          style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
-            gap: "25px"
-          }}>
-            {content.map((item) => (
+            gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))",
+            gap: "16px"
+          }}
+        >
+          {contents.map((item) => {
+            const poster = getPoster(item);
+            return (
               <div
                 key={item.id}
-                onClick={() => setSelected(item)}
+                onClick={() => handleSelect(item)}
                 style={{
-                  backgroundColor: "#1e1e1e",
-                  borderRadius: "10px",
-                  overflow: "hidden",
                   cursor: "pointer",
-                  transition: "transform 0.2s",
+                  borderRadius: "8px",
+                  overflow: "hidden",
+                  backgroundColor: "#1e1e1e",
+                  transition: "transform 0.2s"
                 }}
-                onMouseEnter={(e) => e.currentTarget.style.transform = "scale(1.05)"}
-                onMouseLeave={(e) => e.currentTarget.style.transform = "scale(1)"}
               >
-                {item.poster ? (
+                {poster ? (
                   <img
-                    src={item.poster}
+                    src={poster}
                     alt={item.title}
-                    style={{ width: "100%", height: "260px", objectFit: "cover" }}
+                    style={{ width: "100%", height: "210px", objectFit: "cover" }}
                   />
                 ) : (
-                  <div style={{
-                    width: "100%",
-                    height: "260px",
-                    backgroundColor: "#333",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    color: "#777",
-                    fontSize: "14px"
-                  }}>
+                  <div
+                    style={{
+                      width: "100%",
+                      height: "210px",
+                      backgroundColor: "#333",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      color: "#888",
+                      fontSize: "14px"
+                    }}
+                  >
                     Sin portada
                   </div>
                 )}
-                <div style={{ padding: "12px" }}>
-                  <h3 style={{ margin: "0 0 5px 0", fontSize: "15px" }}>{item.title}</h3>
-                  <p style={{ margin: 0, color: "#aaa", fontSize: "13px" }}>
-                    {item.type === "movie" ? "Película" : "Serie"}
-                    {item.year ? ` • ${item.year}` : ""}
+                <div style={{ padding: "10px" }}>
+                  <h3 style={{ margin: "0 0 4px 0", fontSize: "14px", lineHeight: "1.3" }}>
+                    {item.title}
+                  </h3>
+                  <p style={{ margin: 0, fontSize: "12px", color: "#aaa" }}>
+                    {item.type === "movie" ? "Película" : `Serie • ${item.episodes?.length || 0} eps`}
+                    {item.year && ` • ${item.year}`}
                   </p>
                 </div>
               </div>
-            ))}
-          </div>
-        )}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
