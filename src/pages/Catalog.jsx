@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { collection, getDocs, doc, setDoc, getDoc } from "firebase/firestore";
+import { collection, getDocs, doc, setDoc } from "firebase/firestore";
 import { db } from "../firebase";
 
 function Catalog({ user }) {
@@ -7,73 +7,59 @@ function Catalog({ user }) {
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
   const [currentEpisode, setCurrentEpisode] = useState(null);
-
-  // Calificaciones
-  const [ratings, setRatings] = useState({}); // { contentId: { average, count, userRating } }
+  const [ratings, setRatings] = useState({});
   const [savingRating, setSavingRating] = useState(false);
 
   useEffect(() => {
-    const loadContents = async () => {
+    if (!user?.uid) return;
+
+    const loadData = async () => {
       try {
-        const querySnapshot = await getDocs(collection(db, "content"));
+        const contentSnap = await getDocs(collection(db, "content"));
         const list = [];
-        querySnapshot.forEach((doc) => {
-          list.push({ id: doc.id, ...doc.data() });
+        contentSnap.forEach((docSnap) => {
+          list.push({ id: docSnap.id, ...docSnap.data() });
         });
         setContents(list);
 
         // Cargar calificaciones
-        await loadRatings(list, user.uid);
+        const ratingsSnap = await getDocs(collection(db, "ratings"));
+        const allRatings = {};
+        ratingsSnap.forEach((docSnap) => {
+          const data = docSnap.data();
+          if (!allRatings[data.contentId]) allRatings[data.contentId] = [];
+          allRatings[data.contentId].push(data);
+        });
+
+        const ratingsData = {};
+        list.forEach((item) => {
+          const itemRatings = allRatings[item.id] || [];
+          const count = itemRatings.length;
+          const average = count > 0
+            ? itemRatings.reduce((sum, r) => sum + r.rating, 0) / count
+            : 0;
+          const userRatingObj = itemRatings.find((r) => r.userId === user.uid);
+
+          ratingsData[item.id] = {
+            average: Math.round(average * 10) / 10,
+            count,
+            userRating: userRatingObj ? userRatingObj.rating : 0
+          };
+        });
+        setRatings(ratingsData);
       } catch (error) {
-        console.error("Error al cargar contenido:", error);
+        console.error(error);
       }
       setLoading(false);
     };
 
-    loadContents();
-  }, [user.uid]);
-
-  const loadRatings = async (contentsList, userId) => {
-    try {
-      const ratingsSnap = await getDocs(collection(db, "ratings"));
-      const allRatings = {};
-
-      ratingsSnap.forEach((docSnap) => {
-        const data = docSnap.data();
-        if (!allRatings[data.contentId]) {
-          allRatings[data.contentId] = [];
-        }
-        allRatings[data.contentId].push(data);
-      });
-
-      const ratingsData = {};
-
-      contentsList.forEach((item) => {
-        const itemRatings = allRatings[item.id] || [];
-        const count = itemRatings.length;
-        const average = count > 0
-          ? itemRatings.reduce((sum, r) => sum + r.rating, 0) / count
-          : 0;
-
-        const userRatingObj = itemRatings.find((r) => r.userId === userId);
-
-        ratingsData[item.id] = {
-          average: Math.round(average * 10) / 10,
-          count,
-          userRating: userRatingObj ? userRatingObj.rating : 0
-        };
-      });
-
-      setRatings(ratingsData);
-    } catch (error) {
-      console.error("Error al cargar calificaciones:", error);
-    }
-  };
+    loadData();
+  }, [user?.uid]);
 
   const handleRate = async (contentId, rating) => {
     if (!user || savingRating) return;
-
     setSavingRating(true);
+
     try {
       const ratingId = `${contentId}_${user.uid}`;
       await setDoc(doc(db, "ratings", ratingId), {
@@ -83,14 +69,12 @@ function Catalog({ user }) {
         updatedAt: new Date()
       });
 
-      // Actualizar localmente
       setRatings((prev) => {
         const current = prev[contentId] || { average: 0, count: 0, userRating: 0 };
         const wasRated = current.userRating > 0;
         const newCount = wasRated ? current.count : current.count + 1;
-
-        // Recalcular promedio simple
         let newAverage;
+
         if (wasRated) {
           const total = current.average * current.count - current.userRating + rating;
           newAverage = total / current.count;
@@ -109,89 +93,28 @@ function Catalog({ user }) {
         };
       });
     } catch (error) {
-      console.error("Error al calificar:", error);
-      alert("No se pudo guardar la calificación");
+      console.error(error);
+      alert("No se pudo guardar la calificación. Revisa las reglas de Firestore.");
     }
     setSavingRating(false);
   };
 
-  // ========== Helpers de video ==========
-  const getYoutubeId = (link) => {
-    if (!link) return null;
-    const match = link.match(
-      /(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/
-    );
-    return match ? match[1] : null;
-  };
-
-  const getEmbedUrl = (link) => {
-    if (!link) return null;
-
-    const youtubeId = getYoutubeId(link);
-    if (youtubeId) return `https://www.youtube.com/embed/${youtubeId}?rel=0`;
-
-    const driveMatch = link.match(/\/d\/([a-zA-Z0-9_-]+)/);
-    if (driveMatch && driveMatch[1]) {
-      return `https://drive.google.com/file/d/${driveMatch[1]}/preview`;
-    }
-
-    if (link.includes("archive.org")) {
-      if (link.includes("/details/")) return link.replace("/details/", "/embed/");
-      if (link.includes("/embed/")) return link;
-      return `https://archive.org/embed/${link.split("/").pop()}`;
-    }
-
-    return null;
-  };
-
-  const isMegaLink = (link) => link && link.includes("mega.nz");
-
-  const getPoster = (item) => {
-    if (item.poster) return item.poster;
-    if (item.driveLink) {
-      const youtubeId = getYoutubeId(item.driveLink);
-      if (youtubeId) return `https://img.youtube.com/vi/${youtubeId}/maxresdefault.jpg`;
-    }
-    if (item.episodes?.length > 0) {
-      const youtubeId = getYoutubeId(item.episodes[0].link);
-      if (youtubeId) return `https://img.youtube.com/vi/${youtubeId}/maxresdefault.jpg`;
-    }
-    return null;
-  };
-
-  const handleSelect = (item) => {
-    setSelected(item);
-    if (item.type === "series" && item.episodes?.length > 0) {
-      setCurrentEpisode({ ...item.episodes[0], number: item.episodes[0].number || 1 });
-    } else {
-      setCurrentEpisode(null);
-    }
-  };
-
-  const handleBack = () => {
-    setSelected(null);
-    setCurrentEpisode(null);
-  };
-
-  // Componente de estrellas
   const Stars = ({ contentId, size = 22, interactive = false }) => {
     const data = ratings[contentId] || { average: 0, count: 0, userRating: 0 };
-    const displayRating = interactive ? (data.userRating || 0) : data.average;
+    const displayRating = interactive ? data.userRating || 0 : data.average;
 
     return (
       <div style={{ display: "flex", alignItems: "center", gap: "4px", flexWrap: "wrap" }}>
         {[1, 2, 3, 4, 5].map((star) => (
           <span
             key={star}
-            onClick={interactive ? () => handleRate(contentId, star) : undefined}
+            onClick={interactive && !savingRating ? () => handleRate(contentId, star) : undefined}
             style={{
               fontSize: size,
-              cursor: interactive ? "pointer" : "default",
+              cursor: interactive && !savingRating ? "pointer" : "default",
               color: star <= Math.round(displayRating) ? "#FFD700" : "#555",
-              transition: "color 0.15s",
               userSelect: "none"
             }}
-            title={interactive ? `Calificar con ${star} estrella${star > 1 ? "s" : ""}` : ""}
           >
             ★
           </span>
@@ -210,7 +133,24 @@ function Catalog({ user }) {
     );
   };
 
-  // ================== VISTA DE REPRODUCCIÓN ==================
+  const handleSelect = (item) => {
+    setSelected(item);
+    if (item.type === "series" && item.episodes?.length > 0) {
+      setCurrentEpisode({
+        ...item.episodes[0],
+        number: item.episodes[0].number || 1
+      });
+    } else {
+      setCurrentEpisode(null);
+    }
+  };
+
+  const handleBack = () => {
+    setSelected(null);
+    setCurrentEpisode(null);
+  };
+
+  // Vista de reproducción
   if (selected) {
     const isSeries = selected.type === "series";
     const videoLink = isSeries ? currentEpisode?.link : selected.driveLink;
@@ -227,19 +167,16 @@ function Catalog({ user }) {
             color: "white",
             border: "none",
             borderRadius: "6px",
-            cursor: "pointer",
-            fontSize: "15px"
+            cursor: "pointer"
           }}
         >
           ← Volver al catálogo
         </button>
 
-        <h1 style={{ margin: "0 0 8px 0", fontSize: "22px", lineHeight: "1.3" }}>
-          {selected.title}
-        </h1>
+        <h1 style={{ margin: "0 0 8px 0", fontSize: "22px" }}>{selected.title}</h1>
 
         {isSeries && currentEpisode && (
-          <p style={{ color: "#4CAF50", margin: "0 0 6px 0", fontSize: "16px" }}>
+          <p style={{ color: "#4CAF50", margin: "0 0 6px 0" }}>
             Episodio {currentEpisode.number || "?"}
             {currentEpisode.title ? `: ${currentEpisode.title}` : ""}
           </p>
@@ -250,27 +187,19 @@ function Catalog({ user }) {
           {selected.year && ` • ${selected.year}`}
         </p>
 
-        {/* CALIFICACIÓN */}
-        <div style={{ marginBottom: "18px" }}>
+        {/* Calificación */}
+        <div style={{ marginBottom: "16px" }}>
           <p style={{ margin: "0 0 6px 0", fontSize: "14px", color: "#ccc" }}>
             Califica esta {selected.type === "movie" ? "película" : "serie"}:
           </p>
           <Stars contentId={selected.id} size={28} interactive={true} />
-          {(ratings[selected.id]?.count || 0) > 0 && (
-            <p style={{ margin: "6px 0 0 0", fontSize: "13px", color: "#aaa" }}>
-              Promedio: {ratings[selected.id].average} / 5 ({ratings[selected.id].count} calificación
-              {ratings[selected.id].count !== 1 ? "es" : ""})
-            </p>
-          )}
         </div>
 
         {selected.description && (
-          <p style={{ marginBottom: "20px", color: "#ccc", fontSize: "15px", lineHeight: "1.5" }}>
-            {selected.description}
-          </p>
+          <p style={{ marginBottom: "20px", color: "#ccc" }}>{selected.description}</p>
         )}
 
-        {/* REPRODUCTOR */}
+        {/* Reproductor */}
         {videoLink ? (
           isMegaLink(videoLink) ? (
             <div style={{
@@ -328,14 +257,14 @@ function Catalog({ user }) {
           </div>
         )}
 
-        {/* EPISODIOS */}
+        {/* Episodios */}
         {isSeries && selected.episodes?.length > 0 && (
           <div>
             <h2 style={{ margin: "0 0 16px 0", fontSize: "20px" }}>Episodios</h2>
             <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
               {selected.episodes.map((ep, index) => {
                 const epNumber = ep.number || index + 1;
-                const isActive = currentEpisode && currentEpisode.number === epNumber;
+                const isActive = currentEpisode?.number === epNumber;
 
                 return (
                   <div
@@ -385,7 +314,7 @@ function Catalog({ user }) {
     );
   }
 
-  // ================== CATÁLOGO ==================
+  // Catálogo
   return (
     <div style={{ padding: "20px 16px", maxWidth: "1200px", margin: "0 auto" }}>
       <h1 style={{ marginBottom: "8px", fontSize: "26px" }}>Catálogo</h1>
@@ -405,8 +334,6 @@ function Catalog({ user }) {
         }}>
           {contents.map((item) => {
             const poster = getPoster(item);
-            const ratingData = ratings[item.id];
-
             return (
               <div
                 key={item.id}
@@ -430,18 +357,10 @@ function Catalog({ user }) {
                 )}
                 <div style={{ padding: "10px" }}>
                   <h3 style={{ margin: "0 0 4px 0", fontSize: "14px" }}>{item.title}</h3>
-                  <p style={{ margin: "0 0 6px 0", fontSize: "12px", color: "#aaa" }}>
+                  <p style={{ margin: 0, fontSize: "12px", color: "#aaa" }}>
                     {item.type === "movie" ? "Película" : `Serie • ${item.episodes?.length || 0} eps`}
                     {item.year && ` • ${item.year}`}
                   </p>
-                  {ratingData && ratingData.count > 0 && (
-                    <div style={{ fontSize: "13px", color: "#FFD700" }}>
-                      {"★".repeat(Math.round(ratingData.average))}
-                      <span style={{ color: "#aaa", marginLeft: "4px" }}>
-                        {ratingData.average}
-                      </span>
-                    </div>
-                  )}
                 </div>
               </div>
             );
