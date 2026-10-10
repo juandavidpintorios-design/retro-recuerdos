@@ -17,12 +17,10 @@ function Catalog({ user }) {
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
   const [currentEpisode, setCurrentEpisode] = useState(null);
-
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState("all");
   const [filterYear, setFilterYear] = useState("all");
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
-
   const [ratings, setRatings] = useState({});
   const [favorites, setFavorites] = useState({});
   const [history, setHistory] = useState([]);
@@ -103,10 +101,8 @@ function Catalog({ user }) {
     if (!link) return null;
     const yt = getYoutubeId(link);
     if (yt) return `https://www.youtube.com/embed/${yt}?rel=0`;
-
     const drive = link.match(/\/d\/([a-zA-Z0-9_-]+)/);
     if (drive) return `https://drive.google.com/file/d/${drive[1]}/preview`;
-
     if (link.includes("archive.org")) {
       if (link.includes("/details/")) return link.replace("/details/", "/embed/");
       if (link.includes("/embed/")) return link;
@@ -245,11 +241,11 @@ function Catalog({ user }) {
     setSavingComment(false);
   };
 
-  const Stars = ({ contentId, size = 22, interactive = false }) => {
+  const Stars = ({ contentId, size = 18, interactive = false }) => {
     const data = ratings[contentId] || { average: 0, count: 0, userRating: 0 };
     const display = interactive ? data.userRating || 0 : data.average;
     return (
-      <div style={{ display: "flex", alignItems: "center", gap: "3px", flexWrap: "wrap" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "2px", flexWrap: "wrap" }}>
         {[1, 2, 3, 4, 5].map((s) => (
           <span
             key={s}
@@ -285,7 +281,7 @@ function Catalog({ user }) {
       <span
         style={{
           display: "inline-block",
-          padding: "2px 8px",
+          padding: "3px 8px",
           borderRadius: "4px",
           fontSize: "11px",
           fontWeight: "bold",
@@ -343,6 +339,7 @@ function Catalog({ user }) {
     .filter(Boolean)
     .slice(0, 6);
 
+  // ========== TARJETA DE CONTENIDO ==========
   const ContentCard = ({ item }) => {
     const poster = getPoster(item);
     return (
@@ -350,50 +347,85 @@ function Catalog({ user }) {
         onClick={() => handleSelect(item)}
         style={{
           cursor: "pointer",
-          borderRadius: "8px",
+          borderRadius: "12px",
           overflow: "hidden",
-          backgroundColor: "#1e1e1e",
-          position: "relative"
+          backgroundColor: "#1a1a1a",
+          position: "relative",
+          transition: "transform 0.2s, box-shadow 0.2s",
+          border: "1px solid #2a2a2a"
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.transform = "scale(1.04)";
+          e.currentTarget.style.boxShadow = "0 8px 25px rgba(255, 107, 0, 0.25)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.transform = "scale(1)";
+          e.currentTarget.style.boxShadow = "none";
         }}
       >
         <button
           onClick={(e) => toggleFavorite(item.id, e)}
           style={{
             position: "absolute",
-            top: "8px",
-            right: "8px",
-            background: "rgba(0,0,0,0.6)",
+            top: "10px",
+            right: "10px",
+            background: "rgba(0,0,0,0.7)",
             border: "none",
             borderRadius: "50%",
-            width: "32px",
-            height: "32px",
+            width: "36px",
+            height: "36px",
             cursor: "pointer",
-            fontSize: "16px",
-            zIndex: 2
+            fontSize: "18px",
+            zIndex: 2,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center"
           }}
         >
           {favorites[item.id] ? "❤️" : "🤍"}
         </button>
+
         {poster ? (
-          <img src={poster} alt={item.title} style={{ width: "100%", height: "210px", objectFit: "cover" }} />
+          <img
+            src={poster}
+            alt={item.title}
+            style={{
+              width: "100%",
+              height: "240px",
+              objectFit: "cover",
+              display: "block"
+            }}
+          />
         ) : (
           <div
             style={{
               width: "100%",
-              height: "210px",
-              background: "#333",
+              height: "240px",
+              background: "linear-gradient(135deg, #2a2a2a, #1a1a1a)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              color: "#888"
+              color: "#666",
+              fontSize: "14px"
             }}
           >
             Sin portada
           </div>
         )}
-        <div style={{ padding: "10px" }}>
-          <h3 style={{ margin: "0 0 4px 0", fontSize: "14px", lineHeight: 1.3 }}>{item.title}</h3>
-          <p style={{ margin: "0 0 4px 0", fontSize: "12px", color: "#aaa" }}>
+
+        <div style={{ padding: "12px" }}>
+          <h3
+            style={{
+              margin: "0 0 6px 0",
+              fontSize: "15px",
+              lineHeight: 1.3,
+              fontWeight: 600,
+              color: "#fff"
+            }}
+          >
+            {item.title}
+          </h3>
+          <p style={{ margin: "0 0 6px 0", fontSize: "12px", color: "#aaa" }}>
             {item.type === "movie" ? "Película" : `Serie • ${item.episodes?.length || 0} eps`}
             {item.year && ` • ${item.year}`}
             <StatusBadge item={item} />
@@ -404,27 +436,36 @@ function Catalog({ user }) {
     );
   };
 
-  // ========== DETALLE ==========
+  // ========== VISTA DETALLE ==========
   if (selected) {
     const isSeries = selected.type === "series";
     const videoLink = isSeries ? currentEpisode?.link : selected.driveLink;
     const embedUrl = getEmbedUrl(videoLink);
 
     return (
-      <div style={{ padding: "16px", maxWidth: "1100px", margin: "0 auto", color: "#fff" }}>
+      <div
+        style={{
+          padding: "20px",
+          maxWidth: "1100px",
+          margin: "0 auto",
+          color: "#fff",
+          minHeight: "100vh"
+        }}
+      >
         <button
           onClick={handleBack}
           style={{
-            marginBottom: "16px",
-            padding: "10px 18px",
-            background: "#333",
+            marginBottom: "20px",
+            padding: "10px 20px",
+            background: "#2a2a2a",
             color: "#fff",
-            border: "none",
-            borderRadius: "6px",
-            cursor: "pointer"
+            border: "1px solid #444",
+            borderRadius: "8px",
+            cursor: "pointer",
+            fontSize: "14px"
           }}
         >
-          ← Volver
+          ← Volver al catálogo
         </button>
 
         <div
@@ -432,60 +473,64 @@ function Catalog({ user }) {
             display: "flex",
             justifyContent: "space-between",
             alignItems: "flex-start",
-            gap: "12px",
-            flexWrap: "wrap"
+            gap: "16px",
+            flexWrap: "wrap",
+            marginBottom: "12px"
           }}
         >
-          <h1 style={{ margin: "0 0 8px 0", fontSize: "22px" }}>
+          <h1 style={{ margin: 0, fontSize: "26px", fontWeight: 700 }}>
             {selected.title}
             <StatusBadge item={selected} />
           </h1>
           <button
             onClick={(e) => toggleFavorite(selected.id, e)}
             style={{
-              padding: "8px 14px",
-              background: favorites[selected.id] ? "#c62828" : "#333",
+              padding: "10px 18px",
+              background: favorites[selected.id] ? "#c62828" : "#2a2a2a",
               color: "#fff",
               border: "none",
-              borderRadius: "6px",
-              cursor: "pointer"
+              borderRadius: "8px",
+              cursor: "pointer",
+              fontSize: "14px"
             }}
           >
-            {favorites[selected.id] ? "❤️ En favoritos" : "🤍 Favorito"}
+            {favorites[selected.id] ? "❤️ En favoritos" : "🤍 Agregar a favoritos"}
           </button>
         </div>
 
         {isSeries && currentEpisode && (
-          <p style={{ color: "#4CAF50", margin: "0 0 6px 0" }}>
+          <p style={{ color: "#ff9800", margin: "0 0 8px 0", fontWeight: 600 }}>
             Episodio {currentEpisode.number}
             {currentEpisode.title ? `: ${currentEpisode.title}` : ""}
           </p>
         )}
 
-        <p style={{ color: "#aaa", margin: "0 0 12px 0", fontSize: "14px" }}>
+        <p style={{ color: "#aaa", margin: "0 0 16px 0", fontSize: "14px" }}>
           {selected.type === "movie" ? "Película" : "Serie"}
           {selected.year && ` • ${selected.year}`}
         </p>
 
-        <div style={{ marginBottom: "16px" }}>
+        <div style={{ marginBottom: "20px" }}>
           <p style={{ margin: "0 0 6px 0", fontSize: "14px", color: "#ccc" }}>Tu calificación:</p>
           <Stars contentId={selected.id} size={28} interactive />
         </div>
 
         {selected.description && (
-          <p style={{ marginBottom: "20px", color: "#ccc", lineHeight: 1.5 }}>{selected.description}</p>
+          <p style={{ marginBottom: "24px", color: "#ccc", lineHeight: 1.6, fontSize: "15px" }}>
+            {selected.description}
+          </p>
         )}
 
-        {/* REPRODUCTOR - solo Archive, YouTube, Drive, Mega */}
+        {/* REPRODUCTOR */}
         {videoLink ? (
           isMegaLink(videoLink) ? (
             <div
               style={{
-                padding: "40px",
+                padding: "50px",
                 background: "#111",
                 borderRadius: "12px",
                 textAlign: "center",
-                marginBottom: "24px",
+                marginBottom: "28px",
                 border: "1px solid #333"
               }}
             >
@@ -495,12 +540,13 @@ function Catalog({ user }) {
                 rel="noopener noreferrer"
                 style={{
                   display: "inline-block",
-                  padding: "14px 32px",
+                  padding: "16px 36px",
                   background: "#D9272E",
                   color: "#fff",
                   fontWeight: "bold",
-                  borderRadius: "8px",
-                  textDecoration: "none"
+                  borderRadius: "10px",
+                  textDecoration: "none",
+                  fontSize: "16px"
                 }}
               >
                 Ver en Mega
@@ -513,9 +559,10 @@ function Catalog({ user }) {
                 paddingBottom: "56.25%",
                 height: 0,
                 overflow: "hidden",
-                borderRadius: "10px",
+                borderRadius: "12px",
                 background: "#000",
-                marginBottom: "24px"
+                marginBottom: "28px",
+                border: "1px solid #333"
               }}
             >
               <iframe
@@ -535,12 +582,12 @@ function Catalog({ user }) {
           ) : (
             <div
               style={{
-                padding: "40px",
+                padding: "50px",
                 textAlign: "center",
                 color: "#888",
                 background: "#111",
-                borderRadius: "8px",
-                marginBottom: "24px"
+                borderRadius: "12px",
+                marginBottom: "28px"
               }}
             >
               No se pudo cargar el video
@@ -553,12 +600,12 @@ function Catalog({ user }) {
         ) : (
           <div
             style={{
-              padding: "40px",
+              padding: "50px",
               textAlign: "center",
               color: "#888",
               background: "#111",
-              borderRadius: "8px",
-              marginBottom: "24px"
+              borderRadius: "12px",
+              marginBottom: "28px"
             }}
           >
             No hay video disponible
@@ -567,9 +614,9 @@ function Catalog({ user }) {
 
         {/* Episodios */}
         {isSeries && selected.episodes?.length > 0 && (
-          <div style={{ marginBottom: "30px" }}>
-            <h2 style={{ margin: "0 0 14px 0", fontSize: "18px" }}>Episodios</h2>
-            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+          <div style={{ marginBottom: "36px" }}>
+            <h2 style={{ margin: "0 0 16px 0", fontSize: "20px" }}>Episodios</h2>
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
               {selected.episodes.map((ep, i) => {
                 const num = ep.number || i + 1;
                 const active = currentEpisode?.number === num;
@@ -583,33 +630,37 @@ function Catalog({ user }) {
                     style={{
                       display: "flex",
                       alignItems: "center",
-                      gap: "12px",
-                      padding: "12px",
-                      background: active ? "#1a3a5c" : "#1e1e1e",
-                      borderRadius: "8px",
+                      gap: "14px",
+                      padding: "14px",
+                      background: active ? "#1a2a3a" : "#1a1a1a",
+                      borderRadius: "10px",
                       cursor: "pointer",
-                      border: active ? "2px solid #2196F3" : "1px solid #333"
+                      border: active ? "2px solid #ff6b00" : "1px solid #333",
+                      transition: "all 0.2s"
                     }}
                   >
                     <div
                       style={{
-                        width: "48px",
-                        height: "40px",
-                        background: "#333",
-                        borderRadius: "6px",
+                        width: "52px",
+                        height: "42px",
+                        background: active ? "#ff6b00" : "#333",
+                        borderRadius: "8px",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
                         fontWeight: "bold",
-                        color: active ? "#64b5f6" : "#aaa"
+                        color: "#fff",
+                        fontSize: "16px"
                       }}
                     >
                       {num}
                     </div>
                     <div>
-                      <div style={{ fontWeight: "bold", fontSize: "14px" }}>Episodio {num}</div>
-                      <div style={{ fontSize: "12px", color: active ? "#90caf9" : "#aaa" }}>
-                        {active ? "Reproduciendo" : ep.title || "Episodio"}
+                      <div style={{ fontWeight: "bold", fontSize: "15px" }}>
+                        Episodio {num}
+                      </div>
+                      <div style={{ fontSize: "13px", color: active ? "#ffb74d" : "#aaa" }}>
+                        {active ? "▶ Reproduciendo" : ep.title || "Episodio"}
                       </div>
                     </div>
                   </div>
@@ -620,12 +671,12 @@ function Catalog({ user }) {
         )}
 
         {/* Comentarios */}
-        <div style={{ marginTop: "10px", borderTop: "1px solid #333", paddingTop: "20px" }}>
-          <h2 style={{ margin: "0 0 14px 0", fontSize: "18px" }}>
+        <div style={{ marginTop: "10px", borderTop: "1px solid #333", paddingTop: "24px" }}>
+          <h2 style={{ margin: "0 0 16px 0", fontSize: "20px" }}>
             Comentarios ({comments.length})
           </h2>
 
-          <div style={{ marginBottom: "16px" }}>
+          <div style={{ marginBottom: "20px" }}>
             <textarea
               value={newComment}
               onChange={(e) => setNewComment(e.target.value)}
@@ -634,26 +685,28 @@ function Catalog({ user }) {
               maxLength={500}
               style={{
                 width: "100%",
-                padding: "12px",
-                borderRadius: "8px",
+                padding: "14px",
+                borderRadius: "10px",
                 border: "1px solid #444",
                 background: "#1a1a1a",
                 color: "#fff",
                 resize: "vertical",
-                marginBottom: "8px",
-                boxSizing: "border-box"
+                marginBottom: "10px",
+                boxSizing: "border-box",
+                fontSize: "15px"
               }}
             />
             <button
               onClick={handleAddComment}
               disabled={savingComment || !newComment.trim()}
               style={{
-                padding: "10px 20px",
-                background: "#2196F3",
+                padding: "12px 24px",
+                background: "#ff6b00",
                 color: "#fff",
                 border: "none",
-                borderRadius: "6px",
+                borderRadius: "8px",
                 cursor: "pointer",
+                fontWeight: 600,
                 opacity: savingComment || !newComment.trim() ? 0.6 : 1
               }}
             >
@@ -664,14 +717,14 @@ function Catalog({ user }) {
           {comments.length === 0 ? (
             <p style={{ color: "#666" }}>Sé el primero en comentar</p>
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
               {comments.map((c) => (
                 <div
                   key={c.id}
                   style={{
                     background: "#1a1a1a",
-                    padding: "12px 14px",
-                    borderRadius: "8px",
+                    padding: "14px 16px",
+                    borderRadius: "10px",
                     border: "1px solid #333"
                   }}
                 >
@@ -679,7 +732,7 @@ function Catalog({ user }) {
                     style={{
                       display: "flex",
                       justifyContent: "space-between",
-                      marginBottom: "6px"
+                      marginBottom: "8px"
                     }}
                   >
                     <strong style={{ fontSize: "14px" }}>{c.displayName}</strong>
@@ -687,7 +740,7 @@ function Catalog({ user }) {
                       {c.createdAt?.toDate ? c.createdAt.toDate().toLocaleDateString() : ""}
                     </span>
                   </div>
-                  <p style={{ margin: 0, fontSize: "14px", color: "#ccc", lineHeight: 1.4 }}>
+                  <p style={{ margin: 0, fontSize: "14px", color: "#ccc", lineHeight: 1.5 }}>
                     {c.text}
                   </p>
                 </div>
@@ -699,10 +752,19 @@ function Catalog({ user }) {
     );
   }
 
-  // ========== CATÁLOGO ==========
+  // ========== CATÁLOGO PRINCIPAL ==========
   return (
-    <div style={{ padding: "16px", maxWidth: "1200px", margin: "0 auto", color: "#fff" }}>
-      <div style={{ marginBottom: "20px" }}>
+    <div
+      style={{
+        padding: "20px",
+        maxWidth: "1400px",
+        margin: "0 auto",
+        color: "#fff",
+        minHeight: "100vh"
+      }}
+    >
+      {/* Buscador y filtros */}
+      <div style={{ marginBottom: "28px" }}>
         <input
           type="text"
           placeholder="Buscar por título..."
@@ -710,30 +772,40 @@ function Catalog({ user }) {
           onChange={(e) => setSearch(e.target.value)}
           style={{
             width: "100%",
-            padding: "12px 16px",
-            borderRadius: "8px",
-            border: "1px solid #444",
+            padding: "14px 18px",
+            borderRadius: "12px",
+            border: "1px solid #333",
             background: "#1a1a1a",
             color: "#fff",
             fontSize: "16px",
-            marginBottom: "12px",
-            boxSizing: "border-box"
+            marginBottom: "14px",
+            boxSizing: "border-box",
+            outline: "none"
           }}
         />
 
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", alignItems: "center" }}>
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "10px",
+            alignItems: "center"
+          }}
+        >
           {["all", "movie", "series"].map((t) => (
             <button
               key={t}
               onClick={() => setFilterType(t)}
               style={{
-                padding: "8px 14px",
+                padding: "9px 18px",
                 borderRadius: "20px",
                 border: "none",
                 cursor: "pointer",
-                background: filterType === t ? "#2196F3" : "#333",
+                background: filterType === t ? "#ff6b00" : "#2a2a2a",
                 color: "#fff",
-                fontSize: "13px"
+                fontSize: "14px",
+                fontWeight: 600,
+                transition: "background 0.2s"
               }}
             >
               {t === "all" ? "Todos" : t === "movie" ? "Películas" : "Series"}
@@ -744,12 +816,13 @@ function Catalog({ user }) {
             value={filterYear}
             onChange={(e) => setFilterYear(e.target.value)}
             style={{
-              padding: "8px 12px",
+              padding: "9px 16px",
               borderRadius: "20px",
               border: "1px solid #444",
-              background: "#333",
+              background: "#2a2a2a",
               color: "#fff",
-              fontSize: "13px"
+              fontSize: "14px",
+              cursor: "pointer"
             }}
           >
             <option value="all">Todos los años</option>
@@ -763,13 +836,14 @@ function Catalog({ user }) {
           <button
             onClick={() => setShowFavoritesOnly(!showFavoritesOnly)}
             style={{
-              padding: "8px 14px",
+              padding: "9px 18px",
               borderRadius: "20px",
               border: "none",
               cursor: "pointer",
-              background: showFavoritesOnly ? "#c62828" : "#333",
+              background: showFavoritesOnly ? "#c62828" : "#2a2a2a",
               color: "#fff",
-              fontSize: "13px"
+              fontSize: "14px",
+              fontWeight: 600
             }}
           >
             {showFavoritesOnly ? "❤️ Favoritos" : "🤍 Favoritos"}
@@ -778,21 +852,26 @@ function Catalog({ user }) {
       </div>
 
       {loading ? (
-        <p>Cargando...</p>
+        <p style={{ textAlign: "center", color: "#888", marginTop: "60px" }}>
+          Cargando contenido...
+        </p>
       ) : (
         <>
+          {/* Seguir viendo */}
           {!search &&
             !showFavoritesOnly &&
             filterType === "all" &&
             filterYear === "all" &&
             recentHistory.length > 0 && (
-              <div style={{ marginBottom: "28px" }}>
-                <h2 style={{ margin: "0 0 12px 0", fontSize: "18px" }}>Seguir viendo</h2>
+              <div style={{ marginBottom: "36px" }}>
+                <h2 style={{ margin: "0 0 16px 0", fontSize: "22px", fontWeight: 700 }}>
+                  Seguir viendo
+                </h2>
                 <div
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))",
-                    gap: "12px"
+                    gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
+                    gap: "16px"
                   }}
                 >
                   {recentHistory.map((item) => (
@@ -802,18 +881,21 @@ function Catalog({ user }) {
               </div>
             )}
 
+          {/* Destacados */}
           {!search &&
             !showFavoritesOnly &&
             filterType === "all" &&
             filterYear === "all" &&
             featured.length > 0 && (
-              <div style={{ marginBottom: "28px" }}>
-                <h2 style={{ margin: "0 0 12px 0", fontSize: "18px" }}>Destacados</h2>
+              <div style={{ marginBottom: "36px" }}>
+                <h2 style={{ margin: "0 0 16px 0", fontSize: "22px", fontWeight: 700 }}>
+                  Destacados
+                </h2>
                 <div
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))",
-                    gap: "12px"
+                    gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
+                    gap: "16px"
                   }}
                 >
                   {featured.map((item) => (
@@ -823,23 +905,28 @@ function Catalog({ user }) {
               </div>
             )}
 
-          <h2 style={{ margin: "0 0 12px 0", fontSize: "18px" }}>
+          {/* Catálogo */}
+          <h2 style={{ margin: "0 0 16px 0", fontSize: "22px", fontWeight: 700 }}>
             {showFavoritesOnly
               ? "Mis favoritos"
               : search
               ? `Resultados de "${search}"`
               : "Catálogo"}{" "}
-            ({filtered.length})
+            <span style={{ color: "#888", fontSize: "16px", fontWeight: 400 }}>
+              ({filtered.length})
+            </span>
           </h2>
 
           {filtered.length === 0 ? (
-            <p style={{ color: "#888" }}>No se encontró contenido</p>
+            <p style={{ color: "#888", textAlign: "center", marginTop: "40px" }}>
+              No se encontró contenido
+            </p>
           ) : (
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))",
-                gap: "14px"
+                gridTemplateColumns: "repeat(auto-fill, minmax(170px, 1fr))",
+                gap: "18px"
               }}
             >
               {filtered.map((item) => (
