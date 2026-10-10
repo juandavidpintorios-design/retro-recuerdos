@@ -93,7 +93,6 @@ function Login({ onLoginSuccess }) {
       fontFamily: "'Segoe UI', system-ui, sans-serif",
       padding: "20px",
     },
-    // Imágenes de héroes
     hero: {
       position: "absolute",
       opacity: 0.92,
@@ -198,7 +197,6 @@ function Login({ onLoginSuccess }) {
     return (
       <div style={styles.page}>
         {/* Héroes */}
-        <img src="/heroes/silverhawks.png" alt="SilverHawks" style={{ ...styles.hero, top: "4%", left: "2%", maxWidth: "220px" }} />
         <img src="/heroes/thundercats.png" alt="Thundercats" style={{ ...styles.hero, bottom: "3%", left: "2%", maxWidth: "240px" }} />
         <img src="/heroes/heman.png" alt="He-Man" style={{ ...styles.hero, top: "4%", right: "2%", maxWidth: "230px" }} />
         <img src="/heroes/superman.png" alt="Superman" style={{ ...styles.hero, bottom: "3%", right: "2%", maxWidth: "210px" }} />
@@ -245,17 +243,7 @@ function Login({ onLoginSuccess }) {
   // ========== PANTALLA NORMAL DE LOGIN ==========
   return (
     <div style={styles.page}>
-      {/* Héroes - posicionados en las 4 esquinas */}
-      <img 
-        src="/heroes/silverhawks.png" 
-        alt="SilverHawks" 
-        style={{ 
-          ...styles.hero, 
-          top: "3%", 
-          left: "1.5%", 
-          maxWidth: "min(240px, 22vw)" 
-        }} 
-      />
+      {/* Héroes (sin SilverHawks) */}
       <img 
         src="/heroes/thundercats.png" 
         alt="Thundercats" 
