@@ -93,10 +93,10 @@ function Login({ onLoginSuccess }) {
       fontFamily: "'Segoe UI', system-ui, sans-serif",
       padding: "20px",
     },
-    hero: {
+    logoImg: {
       position: "absolute",
-      opacity: 0.92,
-      filter: "drop-shadow(0 0 18px rgba(255, 100, 0, 0.55))",
+      opacity: 0.85,
+      filter: "drop-shadow(0 0 12px rgba(255, 107, 0, 0.5))",
       zIndex: 1,
       pointerEvents: "none",
       objectFit: "contain",
@@ -196,10 +196,11 @@ function Login({ onLoginSuccess }) {
   if (showReset) {
     return (
       <div style={styles.page}>
-        {/* Héroes */}
-        <img src="/heroes/thundercats.png" alt="Thundercats" style={{ ...styles.hero, bottom: "3%", left: "2%", maxWidth: "240px" }} />
-        <img src="/heroes/heman.png" alt="He-Man" style={{ ...styles.hero, top: "4%", right: "2%", maxWidth: "230px" }} />
-        <img src="/heroes/superman.png" alt="Superman" style={{ ...styles.hero, bottom: "3%", right: "2%", maxWidth: "210px" }} />
+        {/* Logos en las 4 esquinas */}
+        <img src="/heroes/thundercats-logo.png" alt="Thundercats" style={{ ...styles.logoImg, top: "4%", left: "3%", maxWidth: "min(160px, 18vw)" }} />
+        <img src="/heroes/heman-logo.png" alt="He-Man" style={{ ...styles.logoImg, top: "4%", right: "3%", maxWidth: "min(150px, 17vw)" }} />
+        <img src="/heroes/batman-logo.png" alt="Batman" style={{ ...styles.logoImg, bottom: "4%", left: "3%", maxWidth: "min(140px, 16vw)" }} />
+        <img src="/heroes/superman-logo.png" alt="Superman" style={{ ...styles.logoImg, bottom: "4%", right: "3%", maxWidth: "min(150px, 17vw)" }} />
 
         <div style={styles.card}>
           <h1 style={styles.logo}>retro-recuerdos</h1>
@@ -243,35 +244,45 @@ function Login({ onLoginSuccess }) {
   // ========== PANTALLA NORMAL DE LOGIN ==========
   return (
     <div style={styles.page}>
-      {/* Héroes (sin SilverHawks) */}
+      {/* Logos en las 4 esquinas */}
       <img 
-        src="/heroes/thundercats.png" 
+        src="/heroes/thundercats-logo.png" 
         alt="Thundercats" 
         style={{ 
-          ...styles.hero, 
-          bottom: "2%", 
-          left: "1.5%", 
-          maxWidth: "min(260px, 24vw)" 
+          ...styles.logoImg, 
+          top: "3%", 
+          left: "2%", 
+          maxWidth: "min(170px, 19vw)" 
         }} 
       />
       <img 
-        src="/heroes/heman.png" 
+        src="/heroes/heman-logo.png" 
         alt="He-Man" 
         style={{ 
-          ...styles.hero, 
+          ...styles.logoImg, 
           top: "3%", 
-          right: "1.5%", 
-          maxWidth: "min(250px, 23vw)" 
+          right: "2%", 
+          maxWidth: "min(160px, 18vw)" 
         }} 
       />
       <img 
-        src="/heroes/superman.png" 
+        src="/heroes/batman-logo.png" 
+        alt="Batman" 
+        style={{ 
+          ...styles.logoImg, 
+          bottom: "3%", 
+          left: "2%", 
+          maxWidth: "min(150px, 17vw)" 
+        }} 
+      />
+      <img 
+        src="/heroes/superman-logo.png" 
         alt="Superman" 
         style={{ 
-          ...styles.hero, 
-          bottom: "2%", 
-          right: "1.5%", 
-          maxWidth: "min(230px, 21vw)" 
+          ...styles.logoImg, 
+          bottom: "3%", 
+          right: "2%", 
+          maxWidth: "min(160px, 18vw)" 
         }} 
       />
 
