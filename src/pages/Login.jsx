@@ -93,13 +93,14 @@ function Login({ onLoginSuccess }) {
       fontFamily: "'Segoe UI', system-ui, sans-serif",
       padding: "20px",
     },
+    // Imágenes de héroes
     hero: {
       position: "absolute",
-      maxWidth: "260px",
-      opacity: 0.85,
-      filter: "drop-shadow(0 0 18px rgba(255, 100, 0, 0.6))",
+      opacity: 0.92,
+      filter: "drop-shadow(0 0 18px rgba(255, 100, 0, 0.55))",
       zIndex: 1,
       pointerEvents: "none",
+      objectFit: "contain",
     },
     card: {
       background: "linear-gradient(145deg, #1e1e2f, #12121f)",
@@ -196,10 +197,11 @@ function Login({ onLoginSuccess }) {
   if (showReset) {
     return (
       <div style={styles.page}>
-        {/* Personajes */}
-        <img src="/heroes/heman.png" alt="He-Man" style={{ ...styles.hero, top: "4%", right: "2%" }} />
-        <img src="/heroes/thundercats.png" alt="Thundercats" style={{ ...styles.hero, bottom: "3%", left: "1%", maxWidth: "280px" }} />
-        <img src="/heroes/silverhawks.png" alt="SilverHawks" style={{ ...styles.hero, top: "12%", left: "2%", maxWidth: "230px" }} />
+        {/* Héroes */}
+        <img src="/heroes/silverhawks.png" alt="SilverHawks" style={{ ...styles.hero, top: "4%", left: "2%", maxWidth: "220px" }} />
+        <img src="/heroes/thundercats.png" alt="Thundercats" style={{ ...styles.hero, bottom: "3%", left: "2%", maxWidth: "240px" }} />
+        <img src="/heroes/heman.png" alt="He-Man" style={{ ...styles.hero, top: "4%", right: "2%", maxWidth: "230px" }} />
+        <img src="/heroes/superman.png" alt="Superman" style={{ ...styles.hero, bottom: "3%", right: "2%", maxWidth: "210px" }} />
 
         <div style={styles.card}>
           <h1 style={styles.logo}>retro-recuerdos</h1>
@@ -243,11 +245,47 @@ function Login({ onLoginSuccess }) {
   // ========== PANTALLA NORMAL DE LOGIN ==========
   return (
     <div style={styles.page}>
-      {/* Personajes */}
-      <img src="/heroes/heman.png" alt="He-Man" style={{ ...styles.hero, top: "4%", right: "2%" }} />
-      <img src="/heroes/thundercats.png" alt="Thundercats" style={{ ...styles.hero, bottom: "3%", left: "1%", maxWidth: "280px" }} />
-      <img src="/heroes/silverhawks.png" alt="SilverHawks" style={{ ...styles.hero, top: "12%", left: "2%", maxWidth: "230px" }} />
-      <img src="/heroes/superman.png" alt="Superman" style={{ ...styles.hero, bottom: "8%", right: "3%", maxWidth: "210px" }} />
+      {/* Héroes - posicionados en las 4 esquinas */}
+      <img 
+        src="/heroes/silverhawks.png" 
+        alt="SilverHawks" 
+        style={{ 
+          ...styles.hero, 
+          top: "3%", 
+          left: "1.5%", 
+          maxWidth: "min(240px, 22vw)" 
+        }} 
+      />
+      <img 
+        src="/heroes/thundercats.png" 
+        alt="Thundercats" 
+        style={{ 
+          ...styles.hero, 
+          bottom: "2%", 
+          left: "1.5%", 
+          maxWidth: "min(260px, 24vw)" 
+        }} 
+      />
+      <img 
+        src="/heroes/heman.png" 
+        alt="He-Man" 
+        style={{ 
+          ...styles.hero, 
+          top: "3%", 
+          right: "1.5%", 
+          maxWidth: "min(250px, 23vw)" 
+        }} 
+      />
+      <img 
+        src="/heroes/superman.png" 
+        alt="Superman" 
+        style={{ 
+          ...styles.hero, 
+          bottom: "2%", 
+          right: "1.5%", 
+          maxWidth: "min(230px, 21vw)" 
+        }} 
+      />
 
       <div style={styles.card}>
         <h1 style={styles.logo}>retro-recuerdos</h1>
