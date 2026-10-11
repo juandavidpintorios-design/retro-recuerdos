@@ -8,7 +8,9 @@ import {
   addDoc,
   query,
   where,
-  serverTimestamp
+  serverTimestamp,
+  getDoc,
+  updateDoc
 } from "firebase/firestore";
 import { db } from "../firebase";
 
@@ -28,8 +30,27 @@ function Catalog({ user }) {
   const [newComment, setNewComment] = useState("");
   const [savingRating, setSavingRating] = useState(false);
   const [savingComment, setSavingComment] = useState(false);
+  const [deviceAllowed, setDeviceAllowed] = useState(true);
+  const [deviceChecked, setDeviceChecked] = useState(false);
 
-  // Verificar si la suscripción está activa
+  // ID único del dispositivo
+  const getDeviceId = () => {
+    let id = localStorage.getItem("retro_device_id");
+    if (!id) {
+      id = "dev_" + Math.random().toString(36).slice(2) + "_" + Date.now();
+      localStorage.setItem("retro_device_id", id);
+    }
+    return id;
+  };
+
+  const getDeviceLabel = () => {
+    const ua = navigator.userAgent;
+    if (/mobile/i.test(ua)) return "Celular";
+    if (/tablet|ipad/i.test(ua)) return "Tablet";
+    return "PC / Laptop";
+  };
+
+  // Verificar suscripción activa
   const isSubActive = () => {
     if (!user?.subscriptionExpiresAt) return false;
     const expire = user.subscriptionExpiresAt.toDate
@@ -38,9 +59,53 @@ function Catalog({ user }) {
     return expire > new Date();
   };
 
+  // Registrar dispositivo y comprobar límite de 4
+  const checkDeviceLimit = async () => {
+    if (!user?.uid) return;
+    const deviceId = getDeviceId();
+    const deviceRef = doc(db, "devices", `${user.uid}_${deviceId}`);
+
+    try {
+      const existing = await getDoc(deviceRef);
+      if (existing.exists()) {
+        await updateDoc(deviceRef, { lastSeen: serverTimestamp() });
+        setDeviceAllowed(true);
+        setDeviceChecked(true);
+        return;
+      }
+
+      const snap = await getDocs(
+        query(collection(db, "devices"), where("userId", "==", user.uid))
+      );
+
+      if (snap.size >= 4) {
+        setDeviceAllowed(false);
+        setDeviceChecked(true);
+        return;
+      }
+
+      await setDoc(deviceRef, {
+        userId: user.uid,
+        deviceId,
+        label: getDeviceLabel(),
+        userAgent: navigator.userAgent.slice(0, 120),
+        createdAt: serverTimestamp(),
+        lastSeen: serverTimestamp()
+      });
+
+      setDeviceAllowed(true);
+      setDeviceChecked(true);
+    } catch (err) {
+      console.error(err);
+      setDeviceAllowed(true);
+      setDeviceChecked(true);
+    }
+  };
+
   useEffect(() => {
     if (!user?.uid) return;
     loadAll();
+    checkDeviceLimit();
   }, [user?.uid]);
 
   const loadAll = async () => {
@@ -449,7 +514,7 @@ function Catalog({ user }) {
     const isSeries = selected.type === "series";
     const videoLink = isSeries ? currentEpisode?.link : selected.driveLink;
     const embedUrl = getEmbedUrl(videoLink);
-    const canPlay = isSubActive();
+    const canPlay = isSubActive() && deviceAllowed;
 
     return (
       <div
@@ -531,7 +596,7 @@ function Catalog({ user }) {
           </p>
         )}
 
-        {/* REPRODUCTOR - bloqueado si no hay suscripción activa */}
+        {/* REPRODUCTOR */}
         {!canPlay ? (
           <div
             style={{
@@ -543,12 +608,18 @@ function Catalog({ user }) {
               border: "2px solid #e65100"
             }}
           >
-            <h3 style={{ color: "#ff9800", marginTop: 0 }}>Suscripción vencida</h3>
+            <h3 style={{ color: "#ff9800", marginTop: 0 }}>
+              {!isSubActive() ? "Suscripción vencida" : "Límite de dispositivos"}
+            </h3>
             <p style={{ color: "#ccc" }}>
-              Tu suscripción ha terminado. Puedes ver el catálogo, pero no reproducir contenido.
+              {!isSubActive()
+                ? "Tu suscripción ha terminado. Puedes ver el catálogo, pero no reproducir contenido."
+                : "Esta cuenta ya está siendo usada en 4 dispositivos. Elimina uno desde Mi Perfil para poder ver aquí."}
             </p>
             <p style={{ color: "#aaa", fontSize: "14px" }}>
-              Comunícate con el administrador para renovar tu plan.
+              {!isSubActive()
+                ? "Comunícate con el administrador para renovar tu plan."
+                : "Ve a Mi Perfil → Dispositivos para gestionarlos."}
             </p>
           </div>
         ) : videoLink ? (
