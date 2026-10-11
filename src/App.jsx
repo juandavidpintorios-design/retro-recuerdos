@@ -20,6 +20,40 @@ function App() {
   const [maintenance, setMaintenance] = useState(null);
   const [checkingUpdate, setCheckingUpdate] = useState(true);
 
+  // Tema: villano (oscuro) | heroe (claro)
+  const [theme, setTheme] = useState(() => localStorage.getItem("retro_theme") || "villano");
+
+  const toggleTheme = () => {
+    const next = theme === "villano" ? "heroe" : "villano";
+    setTheme(next);
+    localStorage.setItem("retro_theme", next);
+  };
+
+  const isHeroe = theme === "heroe";
+
+  const colors = {
+    bg: isHeroe ? "#f5f0e8" : "#111",
+    header: isHeroe ? "#e8e0d4" : "#1a1a1a",
+    text: isHeroe ? "#1a1a1a" : "#fff",
+    muted: isHeroe ? "#555" : "#aaa",
+    card: isHeroe ? "#fff" : "#1a1a1a",
+    border: isHeroe ? "#d0c8b8" : "#333",
+    accent: "#ff6b00"
+  };
+
+  // Días restantes de suscripción
+  const getDaysLeft = () => {
+    if (!user?.subscriptionExpiresAt) return null;
+    const expire = user.subscriptionExpiresAt.toDate
+      ? user.subscriptionExpiresAt.toDate()
+      : new Date(user.subscriptionExpiresAt);
+    const diff = Math.ceil((expire - new Date()) / (1000 * 60 * 60 * 24));
+    return diff;
+  };
+
+  const daysLeft = getDaysLeft();
+  const showSubWarning = daysLeft !== null && daysLeft >= 0 && daysLeft <= 7;
+
   // Revisar actualizaciones / mantenimiento
   useEffect(() => {
     const checkUpdate = async () => {
@@ -117,7 +151,7 @@ function App() {
     setUser(updatedUser);
   };
 
-  // Pantalla de actualización / mantenimiento
+  // Pantalla de actualización
   if (maintenance && maintenance > new Date()) {
     const mins = Math.max(1, Math.ceil((maintenance - new Date()) / 60000));
     return (
@@ -138,17 +172,10 @@ function App() {
         <p style={{ color: "#ccc", fontSize: "18px", maxWidth: "400px" }}>
           Estamos aplicando una actualización. El acceso estará disponible en aproximadamente:
         </p>
-        <p style={{
-          fontSize: "48px",
-          fontWeight: 900,
-          color: "#ffcc00",
-          margin: "20px 0"
-        }}>
+        <p style={{ fontSize: "48px", fontWeight: 900, color: "#ffcc00", margin: "20px 0" }}>
           {mins} min
         </p>
-        <p style={{ color: "#888" }}>
-          Luego inicia sesión otra vez para continuar.
-        </p>
+        <p style={{ color: "#888" }}>Luego inicia sesión otra vez para continuar.</p>
       </div>
     );
   }
@@ -209,10 +236,7 @@ function App() {
               >
                 Películas / Series
               </button>
-              <button
-                onClick={() => setAdminView(null)}
-                style={{ padding: "8px 16px", cursor: "pointer" }}
-              >
+              <button onClick={() => setAdminView(null)} style={{ padding: "8px 16px", cursor: "pointer" }}>
                 Volver al catálogo
               </button>
               <button
@@ -237,76 +261,81 @@ function App() {
     }
 
     return (
-      <div style={{ minHeight: "100vh", backgroundColor: "#111", color: "white" }}>
+      <div style={{ minHeight: "100vh", backgroundColor: colors.bg, color: colors.text }}>
+        {/* Aviso suscripción por vencer */}
+        {showSubWarning && (
+          <div style={{
+            background: daysLeft <= 2 ? "#c62828" : "#e65100",
+            color: "#fff",
+            padding: "10px 16px",
+            textAlign: "center",
+            fontSize: "14px",
+            fontWeight: 600
+          }}>
+            {daysLeft === 0
+              ? "⚠️ Tu suscripción vence hoy. Renueva para no perder el acceso."
+              : `⚠️ Tu suscripción vence en ${daysLeft} día${daysLeft === 1 ? "" : "s"}. Contacta al administrador para renovar.`}
+          </div>
+        )}
+
+        {/* Barra superior */}
         <div style={{
           padding: "12px 20px",
-          backgroundColor: "#1a1a1a",
+          backgroundColor: colors.header,
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
           flexWrap: "wrap",
-          gap: "10px"
+          gap: "10px",
+          borderBottom: `1px solid ${colors.border}`
         }}>
-          <h2 style={{ margin: 0, cursor: "pointer" }} onClick={() => setPage("catalog")}>
+          <h2
+            style={{ margin: 0, cursor: "pointer", color: colors.accent }}
+            onClick={() => setPage("catalog")}
+          >
             Retro Recuerdos
           </h2>
 
           <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+            {[
+              { id: "catalog", label: "Catálogo" },
+              { id: "profile", label: "Mi Perfil" },
+              { id: "requests", label: "Solicitar" },
+              { id: "about", label: "Acerca de" }
+            ].map((p) => (
+              <button
+                key={p.id}
+                onClick={() => setPage(p.id)}
+                style={{
+                  padding: "7px 14px",
+                  backgroundColor: page === p.id ? colors.accent : isHeroe ? "#ddd" : "#333",
+                  color: page === p.id || !isHeroe ? "#fff" : "#222",
+                  border: "none",
+                  borderRadius: "4px",
+                  cursor: "pointer",
+                  fontSize: "13px"
+                }}
+              >
+                {p.label}
+              </button>
+            ))}
+
+            {/* Tema Villano / Héroe */}
             <button
-              onClick={() => setPage("catalog")}
+              onClick={toggleTheme}
               style={{
                 padding: "7px 14px",
-                backgroundColor: page === "catalog" ? "#ff6b00" : "#333",
-                color: "white",
+                backgroundColor: isHeroe ? "#333" : "#ffcc00",
+                color: isHeroe ? "#fff" : "#111",
                 border: "none",
                 borderRadius: "4px",
                 cursor: "pointer",
-                fontSize: "13px"
+                fontSize: "13px",
+                fontWeight: 700
               }}
+              title="Cambiar tema"
             >
-              Catálogo
-            </button>
-            <button
-              onClick={() => setPage("profile")}
-              style={{
-                padding: "7px 14px",
-                backgroundColor: page === "profile" ? "#ff6b00" : "#333",
-                color: "white",
-                border: "none",
-                borderRadius: "4px",
-                cursor: "pointer",
-                fontSize: "13px"
-              }}
-            >
-              Mi Perfil
-            </button>
-            <button
-              onClick={() => setPage("requests")}
-              style={{
-                padding: "7px 14px",
-                backgroundColor: page === "requests" ? "#ff6b00" : "#333",
-                color: "white",
-                border: "none",
-                borderRadius: "4px",
-                cursor: "pointer",
-                fontSize: "13px"
-              }}
-            >
-              Solicitar
-            </button>
-            <button
-              onClick={() => setPage("about")}
-              style={{
-                padding: "7px 14px",
-                backgroundColor: page === "about" ? "#ff6b00" : "#333",
-                color: "white",
-                border: "none",
-                borderRadius: "4px",
-                cursor: "pointer",
-                fontSize: "13px"
-              }}
-            >
-              Acerca de
+              {isHeroe ? "😈 Villano" : "🦸 Héroe"}
             </button>
 
             {user.role === "admin" && (
@@ -342,7 +371,7 @@ function App() {
               </>
             )}
 
-            <span style={{ fontSize: "13px", color: "#aaa" }}>
+            <span style={{ fontSize: "13px", color: colors.muted }}>
               Hola, {user.displayName}
             </span>
 
@@ -363,7 +392,7 @@ function App() {
           </div>
         </div>
 
-        {page === "catalog" && <Catalog user={user} />}
+        {page === "catalog" && <Catalog user={user} theme={theme} />}
         {page === "profile" && <Profile user={user} onUserUpdate={handleUserUpdate} />}
         {page === "requests" && <Requests user={user} />}
         {page === "about" && <About />}

@@ -31,9 +31,7 @@ function Catalog({ user }) {
   const [savingRating, setSavingRating] = useState(false);
   const [savingComment, setSavingComment] = useState(false);
   const [deviceAllowed, setDeviceAllowed] = useState(true);
-  const [deviceChecked, setDeviceChecked] = useState(false);
 
-  // ID único del dispositivo
   const getDeviceId = () => {
     let id = localStorage.getItem("retro_device_id");
     if (!id) {
@@ -50,7 +48,6 @@ function Catalog({ user }) {
     return "PC / Laptop";
   };
 
-  // Verificar suscripción activa
   const isSubActive = () => {
     if (!user?.subscriptionExpiresAt) return false;
     const expire = user.subscriptionExpiresAt.toDate
@@ -59,7 +56,6 @@ function Catalog({ user }) {
     return expire > new Date();
   };
 
-  // Registrar dispositivo y comprobar límite de 4
   const checkDeviceLimit = async () => {
     if (!user?.uid) return;
     const deviceId = getDeviceId();
@@ -70,7 +66,6 @@ function Catalog({ user }) {
       if (existing.exists()) {
         await updateDoc(deviceRef, { lastSeen: serverTimestamp() });
         setDeviceAllowed(true);
-        setDeviceChecked(true);
         return;
       }
 
@@ -80,7 +75,6 @@ function Catalog({ user }) {
 
       if (snap.size >= 4) {
         setDeviceAllowed(false);
-        setDeviceChecked(true);
         return;
       }
 
@@ -94,11 +88,9 @@ function Catalog({ user }) {
       });
 
       setDeviceAllowed(true);
-      setDeviceChecked(true);
     } catch (err) {
       console.error(err);
       setDeviceAllowed(true);
-      setDeviceChecked(true);
     }
   };
 
@@ -399,7 +391,7 @@ function Catalog({ user }) {
     if (filterType !== "all" && item.type !== filterType) return false;
     if (filterYear !== "all" && String(item.year) !== String(filterYear)) return false;
     if (search.trim()) {
-      if (!item.title?.toLowerCase().includes(search.toLowerCase())) return false;
+      if (!item.title?.toLowerCase().includes(search.toLowerCase().trim())) return false;
     }
     return true;
   });
@@ -462,12 +454,7 @@ function Catalog({ user }) {
           <img
             src={poster}
             alt={item.title}
-            style={{
-              width: "100%",
-              height: "240px",
-              objectFit: "cover",
-              display: "block"
-            }}
+            style={{ width: "100%", height: "240px", objectFit: "cover", display: "block" }}
           />
         ) : (
           <div
@@ -487,15 +474,7 @@ function Catalog({ user }) {
         )}
 
         <div style={{ padding: "12px" }}>
-          <h3
-            style={{
-              margin: "0 0 6px 0",
-              fontSize: "15px",
-              lineHeight: 1.3,
-              fontWeight: 600,
-              color: "#fff"
-            }}
-          >
+          <h3 style={{ margin: "0 0 6px 0", fontSize: "15px", lineHeight: 1.3, fontWeight: 600, color: "#fff" }}>
             {item.title}
           </h3>
           <p style={{ margin: "0 0 6px 0", fontSize: "12px", color: "#aaa" }}>
@@ -512,20 +491,14 @@ function Catalog({ user }) {
   // ========== VISTA DETALLE ==========
   if (selected) {
     const isSeries = selected.type === "series";
-    const videoLink = isSeries ? currentEpisode?.link : selected.driveLink;
+    const videoLink = isSeries
+      ? currentEpisode?.link || currentEpisode?.driveLink
+      : selected.driveLink;
     const embedUrl = getEmbedUrl(videoLink);
     const canPlay = isSubActive() && deviceAllowed;
 
     return (
-      <div
-        style={{
-          padding: "20px",
-          maxWidth: "1100px",
-          margin: "0 auto",
-          color: "#fff",
-          minHeight: "100vh"
-        }}
-      >
+      <div style={{ padding: "20px", maxWidth: "1100px", margin: "0 auto", color: "#fff", minHeight: "100vh" }}>
         <button
           onClick={handleBack}
           style={{
@@ -542,16 +515,14 @@ function Catalog({ user }) {
           ← Volver al catálogo
         </button>
 
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "flex-start",
-            gap: "16px",
-            flexWrap: "wrap",
-            marginBottom: "12px"
-          }}
-        >
+        <div style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+          gap: "16px",
+          flexWrap: "wrap",
+          marginBottom: "12px"
+        }}>
           <h1 style={{ margin: 0, fontSize: "26px", fontWeight: 700 }}>
             {selected.title}
             <StatusBadge item={selected} />
@@ -596,18 +567,63 @@ function Catalog({ user }) {
           </p>
         )}
 
+        {/* TRAILER */}
+        {selected.trailer && (
+          <div style={{ marginBottom: "24px" }}>
+            <h3 style={{ margin: "0 0 12px 0", color: "#ffaa55" }}>Tráiler</h3>
+            {(() => {
+              const yt = getYoutubeId(selected.trailer);
+              if (yt) {
+                return (
+                  <div style={{
+                    position: "relative",
+                    paddingBottom: "56.25%",
+                    height: 0,
+                    overflow: "hidden",
+                    borderRadius: "12px",
+                    background: "#000",
+                    maxWidth: "640px"
+                  }}>
+                    <iframe
+                      src={`https://www.youtube.com/embed/${yt}?rel=0`}
+                      style={{
+                        position: "absolute",
+                        top: 0,
+                        left: 0,
+                        width: "100%",
+                        height: "100%",
+                        border: "none"
+                      }}
+                      allow="encrypted-media; fullscreen"
+                      allowFullScreen
+                    />
+                  </div>
+                );
+              }
+              return (
+                <a
+                  href={selected.trailer}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ color: "#ff6b00", fontWeight: 600 }}
+                >
+                  Ver tráiler ↗
+                </a>
+              );
+            })()}
+          </div>
+        )}
+
         {/* REPRODUCTOR */}
         {!canPlay ? (
-          <div
-            style={{
-              padding: "50px",
-              textAlign: "center",
-              background: "#1a1a1a",
-              borderRadius: "12px",
-              marginBottom: "28px",
-              border: "2px solid #e65100"
-            }}
-          >
+          <div style={{
+            padding: "50px",
+            textAlign: "center",
+            background: "#1a1a1a",
+            borderRadius: "12px",
+            marginBottom: "28px",
+            border: "2px solid #e65100"
+          }}>
             <h3 style={{ color: "#ff9800", marginTop: 0 }}>
               {!isSubActive() ? "Suscripción vencida" : "Límite de dispositivos"}
             </h3>
@@ -624,16 +640,14 @@ function Catalog({ user }) {
           </div>
         ) : videoLink ? (
           isMegaLink(videoLink) ? (
-            <div
-              style={{
-                padding: "50px",
-                background: "#111",
-                borderRadius: "12px",
-                textAlign: "center",
-                marginBottom: "28px",
-                border: "1px solid #333"
-              }}
-            >
+            <div style={{
+              padding: "50px",
+              background: "#111",
+              borderRadius: "12px",
+              textAlign: "center",
+              marginBottom: "28px",
+              border: "1px solid #333"
+            }}>
               <a
                 href={videoLink}
                 target="_blank"
@@ -653,18 +667,16 @@ function Catalog({ user }) {
               </a>
             </div>
           ) : embedUrl ? (
-            <div
-              style={{
-                position: "relative",
-                paddingBottom: "56.25%",
-                height: 0,
-                overflow: "hidden",
-                borderRadius: "12px",
-                background: "#000",
-                marginBottom: "28px",
-                border: "1px solid #333"
-              }}
-            >
+            <div style={{
+              position: "relative",
+              paddingBottom: "56.25%",
+              height: 0,
+              overflow: "hidden",
+              borderRadius: "12px",
+              background: "#000",
+              marginBottom: "28px",
+              border: "1px solid #333"
+            }}>
               <iframe
                 src={embedUrl}
                 style={{
@@ -680,16 +692,14 @@ function Catalog({ user }) {
               />
             </div>
           ) : (
-            <div
-              style={{
-                padding: "50px",
-                textAlign: "center",
-                color: "#888",
-                background: "#111",
-                borderRadius: "12px",
-                marginBottom: "28px"
-              }}
-            >
+            <div style={{
+              padding: "50px",
+              textAlign: "center",
+              color: "#888",
+              background: "#111",
+              borderRadius: "12px",
+              marginBottom: "28px"
+            }}>
               No se pudo cargar el video
               <br />
               <small style={{ color: "#666" }}>
@@ -698,16 +708,14 @@ function Catalog({ user }) {
             </div>
           )
         ) : (
-          <div
-            style={{
-              padding: "50px",
-              textAlign: "center",
-              color: "#888",
-              background: "#111",
-              borderRadius: "12px",
-              marginBottom: "28px"
-            }}
-          >
+          <div style={{
+            padding: "50px",
+            textAlign: "center",
+            color: "#888",
+            background: "#111",
+            borderRadius: "12px",
+            marginBottom: "28px"
+          }}>
             No hay video disponible
           </div>
         )}
@@ -737,30 +745,25 @@ function Catalog({ user }) {
                       borderRadius: "10px",
                       cursor: canPlay ? "pointer" : "not-allowed",
                       opacity: canPlay ? 1 : 0.6,
-                      border: active ? "2px solid #ff6b00" : "1px solid #333",
-                      transition: "all 0.2s"
+                      border: active ? "2px solid #ff6b00" : "1px solid #333"
                     }}
                   >
-                    <div
-                      style={{
-                        width: "52px",
-                        height: "42px",
-                        background: active ? "#ff6b00" : "#333",
-                        borderRadius: "8px",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        fontWeight: "bold",
-                        color: "#fff",
-                        fontSize: "16px"
-                      }}
-                    >
+                    <div style={{
+                      width: "52px",
+                      height: "42px",
+                      background: active ? "#ff6b00" : "#333",
+                      borderRadius: "8px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontWeight: "bold",
+                      color: "#fff",
+                      fontSize: "16px"
+                    }}>
                       {num}
                     </div>
                     <div>
-                      <div style={{ fontWeight: "bold", fontSize: "15px" }}>
-                        Episodio {num}
-                      </div>
+                      <div style={{ fontWeight: "bold", fontSize: "15px" }}>Episodio {num}</div>
                       <div style={{ fontSize: "13px", color: active ? "#ffb74d" : "#aaa" }}>
                         {active ? "▶ Reproduciendo" : ep.title || "Episodio"}
                       </div>
@@ -777,7 +780,6 @@ function Catalog({ user }) {
           <h2 style={{ margin: "0 0 16px 0", fontSize: "20px" }}>
             Comentarios ({comments.length})
           </h2>
-
           <div style={{ marginBottom: "20px" }}>
             <textarea
               value={newComment}
@@ -815,7 +817,6 @@ function Catalog({ user }) {
               {savingComment ? "Publicando..." : "Publicar comentario"}
             </button>
           </div>
-
           {comments.length === 0 ? (
             <p style={{ color: "#666" }}>Sé el primero en comentar</p>
           ) : (
@@ -830,21 +831,13 @@ function Catalog({ user }) {
                     border: "1px solid #333"
                   }}
                 >
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      marginBottom: "8px"
-                    }}
-                  >
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
                     <strong style={{ fontSize: "14px" }}>{c.displayName}</strong>
                     <span style={{ fontSize: "12px", color: "#666" }}>
                       {c.createdAt?.toDate ? c.createdAt.toDate().toLocaleDateString() : ""}
                     </span>
                   </div>
-                  <p style={{ margin: 0, fontSize: "14px", color: "#ccc", lineHeight: 1.5 }}>
-                    {c.text}
-                  </p>
+                  <p style={{ margin: 0, fontSize: "14px", color: "#ccc", lineHeight: 1.5 }}>{c.text}</p>
                 </div>
               ))}
             </div>
@@ -856,15 +849,7 @@ function Catalog({ user }) {
 
   // ========== CATÁLOGO PRINCIPAL ==========
   return (
-    <div
-      style={{
-        padding: "20px",
-        maxWidth: "1400px",
-        margin: "0 auto",
-        color: "#fff",
-        minHeight: "100vh"
-      }}
-    >
+    <div style={{ padding: "20px", maxWidth: "1400px", margin: "0 auto", color: "#fff", minHeight: "100vh" }}>
       <div style={{ marginBottom: "28px" }}>
         <input
           type="text"
@@ -885,14 +870,7 @@ function Catalog({ user }) {
           }}
         />
 
-        <div
-          style={{
-            display: "flex",
-            flexWrap: "wrap",
-            gap: "10px",
-            alignItems: "center"
-          }}
-        >
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", alignItems: "center" }}>
           {["all", "movie", "series"].map((t) => (
             <button
               key={t}
@@ -927,9 +905,7 @@ function Catalog({ user }) {
           >
             <option value="all">Todos los años</option>
             {years.map((y) => (
-              <option key={y} value={y}>
-                {y}
-              </option>
+              <option key={y} value={y}>{y}</option>
             ))}
           </select>
 
@@ -952,56 +928,58 @@ function Catalog({ user }) {
       </div>
 
       {loading ? (
-        <p style={{ textAlign: "center", color: "#888", marginTop: "60px" }}>
-          Cargando contenido...
-        </p>
+        <p style={{ textAlign: "center", color: "#888", marginTop: "60px" }}>Cargando contenido...</p>
       ) : (
         <>
-          {!search &&
-            !showFavoritesOnly &&
-            filterType === "all" &&
-            filterYear === "all" &&
-            recentHistory.length > 0 && (
-              <div style={{ marginBottom: "36px" }}>
-                <h2 style={{ margin: "0 0 16px 0", fontSize: "22px", fontWeight: 700 }}>
-                  Seguir viendo
-                </h2>
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
-                    gap: "16px"
-                  }}
-                >
-                  {recentHistory.map((item) => (
-                    <ContentCard key={`hist-${item.id}`} item={item} />
-                  ))}
-                </div>
+          {/* Nuevos agregados */}
+          {!search && !showFavoritesOnly && filterType === "all" && filterYear === "all" && contents.length > 0 && (
+            <div style={{ marginBottom: "36px" }}>
+              <h2 style={{ margin: "0 0 16px 0", fontSize: "22px", fontWeight: 700, color: "#ff6b00" }}>
+                ✨ Nuevos agregados
+              </h2>
+              <div style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
+                gap: "16px"
+              }}>
+                {contents.slice(0, 6).map((item) => (
+                  <ContentCard key={`new-${item.id}`} item={item} />
+                ))}
               </div>
-            )}
+            </div>
+          )}
 
-          {!search &&
-            !showFavoritesOnly &&
-            filterType === "all" &&
-            filterYear === "all" &&
-            featured.length > 0 && (
-              <div style={{ marginBottom: "36px" }}>
-                <h2 style={{ margin: "0 0 16px 0", fontSize: "22px", fontWeight: 700 }}>
-                  Destacados
-                </h2>
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
-                    gap: "16px"
-                  }}
-                >
-                  {featured.map((item) => (
-                    <ContentCard key={`feat-${item.id}`} item={item} />
-                  ))}
-                </div>
+          {/* Seguir viendo */}
+          {!search && !showFavoritesOnly && filterType === "all" && filterYear === "all" && recentHistory.length > 0 && (
+            <div style={{ marginBottom: "36px" }}>
+              <h2 style={{ margin: "0 0 16px 0", fontSize: "22px", fontWeight: 700 }}>Seguir viendo</h2>
+              <div style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
+                gap: "16px"
+              }}>
+                {recentHistory.map((item) => (
+                  <ContentCard key={`hist-${item.id}`} item={item} />
+                ))}
               </div>
-            )}
+            </div>
+          )}
+
+          {/* Destacados */}
+          {!search && !showFavoritesOnly && filterType === "all" && filterYear === "all" && featured.length > 0 && (
+            <div style={{ marginBottom: "36px" }}>
+              <h2 style={{ margin: "0 0 16px 0", fontSize: "22px", fontWeight: 700 }}>Destacados</h2>
+              <div style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
+                gap: "16px"
+              }}>
+                {featured.map((item) => (
+                  <ContentCard key={`feat-${item.id}`} item={item} />
+                ))}
+              </div>
+            </div>
+          )}
 
           <h2 style={{ margin: "0 0 16px 0", fontSize: "22px", fontWeight: 700 }}>
             {showFavoritesOnly
@@ -1019,13 +997,11 @@ function Catalog({ user }) {
               No se encontró contenido
             </p>
           ) : (
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fill, minmax(170px, 1fr))",
-                gap: "18px"
-              }}
-            >
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(170px, 1fr))",
+              gap: "18px"
+            }}>
               {filtered.map((item) => (
                 <ContentCard key={item.id} item={item} />
               ))}
