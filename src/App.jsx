@@ -2,20 +2,22 @@ import { useState, useEffect } from "react";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "./firebase";
-
 import Register from "./pages/Register";
 import Login from "./pages/Login";
 import Admin from "./pages/Admin";
 import ContentAdmin from "./pages/ContentAdmin";
 import Catalog from "./pages/Catalog";
+import Profile from "./pages/Profile";
+import About from "./pages/About";
+import Requests from "./pages/Requests";
 
 function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showRegister, setShowRegister] = useState(false);
   const [adminView, setAdminView] = useState(null); // null | "users" | "content"
+  const [page, setPage] = useState("catalog"); // catalog | profile | requests | about
 
-  // Mantener la sesión al recargar la página
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
@@ -23,15 +25,15 @@ function App() {
           const userDoc = await getDoc(doc(db, "users", firebaseUser.uid));
           if (userDoc.exists()) {
             const userData = userDoc.data();
-
-            // Solo dejamos entrar si está activo
             if (userData.status === "active") {
               setUser({
                 uid: firebaseUser.uid,
                 email: firebaseUser.email,
                 displayName: userData.displayName || "Usuario",
                 role: userData.role || "user",
-                status: userData.status
+                status: userData.status,
+                subscriptionPlan: userData.subscriptionPlan || null,
+                subscriptionExpiresAt: userData.subscriptionExpiresAt || null
               });
             } else {
               setUser(null);
@@ -48,18 +50,23 @@ function App() {
       }
       setLoading(false);
     });
-
     return () => unsubscribe();
   }, []);
 
   const handleLoginSuccess = (userData) => {
     setUser(userData);
+    setPage("catalog");
   };
 
   const handleLogout = async () => {
     await signOut(auth);
     setUser(null);
     setAdminView(null);
+    setPage("catalog");
+  };
+
+  const handleUserUpdate = (updatedUser) => {
+    setUser(updatedUser);
   };
 
   if (loading) {
@@ -92,7 +99,6 @@ function App() {
             gap: "10px"
           }}>
             <h2 style={{ margin: 0 }}>Retro Recuerdos - Admin</h2>
-
             <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
               <button
                 onClick={() => setAdminView("users")}
@@ -107,7 +113,6 @@ function App() {
               >
                 Usuarios
               </button>
-
               <button
                 onClick={() => setAdminView("content")}
                 style={{
@@ -121,14 +126,12 @@ function App() {
               >
                 Películas / Series
               </button>
-
               <button
                 onClick={() => setAdminView(null)}
                 style={{ padding: "8px 16px", cursor: "pointer" }}
               >
                 Volver al catálogo
               </button>
-
               <button
                 onClick={handleLogout}
                 style={{
@@ -144,14 +147,13 @@ function App() {
               </button>
             </div>
           </div>
-
           {adminView === "users" && <Admin />}
           {adminView === "content" && <ContentAdmin />}
         </div>
       );
     }
 
-    // Catálogo normal
+    // App normal del usuario
     return (
       <div style={{ minHeight: "100vh", backgroundColor: "#111", color: "white" }}>
         {/* Barra superior */}
@@ -164,10 +166,70 @@ function App() {
           flexWrap: "wrap",
           gap: "10px"
         }}>
-          <h2 style={{ margin: 0 }}>Retro Recuerdos</h2>
+          <h2 style={{ margin: 0, cursor: "pointer" }} onClick={() => setPage("catalog")}>
+            Retro Recuerdos
+          </h2>
 
-          <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
-            <span style={{ fontSize: "14px" }}>Hola, {user.displayName}</span>
+          <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+            <button
+              onClick={() => setPage("catalog")}
+              style={{
+                padding: "7px 14px",
+                backgroundColor: page === "catalog" ? "#ff6b00" : "#333",
+                color: "white",
+                border: "none",
+                borderRadius: "4px",
+                cursor: "pointer",
+                fontSize: "13px"
+              }}
+            >
+              Catálogo
+            </button>
+
+            <button
+              onClick={() => setPage("profile")}
+              style={{
+                padding: "7px 14px",
+                backgroundColor: page === "profile" ? "#ff6b00" : "#333",
+                color: "white",
+                border: "none",
+                borderRadius: "4px",
+                cursor: "pointer",
+                fontSize: "13px"
+              }}
+            >
+              Mi Perfil
+            </button>
+
+            <button
+              onClick={() => setPage("requests")}
+              style={{
+                padding: "7px 14px",
+                backgroundColor: page === "requests" ? "#ff6b00" : "#333",
+                color: "white",
+                border: "none",
+                borderRadius: "4px",
+                cursor: "pointer",
+                fontSize: "13px"
+              }}
+            >
+              Solicitar
+            </button>
+
+            <button
+              onClick={() => setPage("about")}
+              style={{
+                padding: "7px 14px",
+                backgroundColor: page === "about" ? "#ff6b00" : "#333",
+                color: "white",
+                border: "none",
+                borderRadius: "4px",
+                cursor: "pointer",
+                fontSize: "13px"
+              }}
+            >
+              Acerca de
+            </button>
 
             {user.role === "admin" && (
               <>
@@ -202,6 +264,10 @@ function App() {
               </>
             )}
 
+            <span style={{ fontSize: "13px", color: "#aaa" }}>
+              Hola, {user.displayName}
+            </span>
+
             <button
               onClick={handleLogout}
               style={{
@@ -219,7 +285,11 @@ function App() {
           </div>
         </div>
 
-        <Catalog user={user} />
+        {/* Contenido según la página */}
+        {page === "catalog" && <Catalog user={user} />}
+        {page === "profile" && <Profile user={user} onUserUpdate={handleUserUpdate} />}
+        {page === "requests" && <Requests user={user} />}
+        {page === "about" && <About />}
       </div>
     );
   }
