@@ -95,7 +95,6 @@ function Catalog({ user }) {
     }
   };
 
-  // Tiempo real: contenido, ratings, favoritos, historial
   useEffect(() => {
     if (!user?.uid) return;
 
@@ -108,7 +107,6 @@ function Catalog({ user }) {
       setContents(list);
       setLoading(false);
 
-      // Actualizar la serie/película abierta si cambió (nuevos episodios, etc.)
       setSelected((prev) => {
         if (!prev) return null;
         const updated = list.find((c) => c.id === prev.id);
@@ -124,12 +122,6 @@ function Catalog({ user }) {
         allRatings[data.contentId].push(data);
       });
 
-      setRatings((prev) => {
-        // Se recalcula cuando cambian contents; aquí guardamos raw y recalculamos abajo
-        return prev;
-      });
-
-      // Recalcular con contents actuales
       setContents((currentList) => {
         const ratingsData = {};
         currentList.forEach((item) => {
@@ -273,21 +265,6 @@ function Catalog({ user }) {
     setSavingRating(false);
   };
 
-  const loadComments = async (contentId) => {
-    try {
-      const snap = await getDocs(
-        query(collection(db, "comments"), where("contentId", "==", contentId))
-      );
-      const list = [];
-      snap.forEach((d) => list.push({ id: d.id, ...d.data() }));
-      list.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
-      setComments(list);
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  // Comentarios en tiempo real cuando hay un seleccionado
   useEffect(() => {
     if (!selected?.id) {
       setComments([]);
@@ -382,9 +359,11 @@ function Catalog({ user }) {
     setSelected(item);
     setNewComment("");
     if (item.type === "series" && item.episodes?.length > 0) {
+      const first = item.episodes[0];
       setCurrentEpisode({
-        ...item.episodes[0],
-        number: item.episodes[0].number || 1
+        ...first,
+        number: first.number || 1,
+        season: first.season || 1
       });
     } else {
       setCurrentEpisode(null);
@@ -450,7 +429,7 @@ function Catalog({ user }) {
             position: "absolute",
             top: "10px",
             right: "10px",
-            background: "rgba(0, 0, 0, 0.7)",
+            background: "rgba(0,0,0,0.7)",
             border: "none",
             borderRadius: "50%",
             width: "36px",
@@ -513,6 +492,24 @@ function Catalog({ user }) {
     const embedUrl = getEmbedUrl(videoLink);
     const canPlay = isSubActive() && deviceAllowed;
 
+    // Agrupar episodios por temporada
+    const bySeason = {};
+    if (isSeries && selected.episodes?.length > 0) {
+      selected.episodes.forEach((ep, i) => {
+        const season = Number(ep.season) || 1;
+        if (!bySeason[season]) bySeason[season] = [];
+        bySeason[season].push({
+          ...ep,
+          number: ep.number || bySeason[season].length + 1,
+          season,
+          _index: i
+        });
+      });
+    }
+    const seasons = Object.keys(bySeason)
+      .map(Number)
+      .sort((a, b) => a - b);
+
     return (
       <div style={{ padding: "20px", maxWidth: "1100px", margin: "0 auto", color: "#fff", minHeight: "100vh" }}>
         <button
@@ -561,7 +558,7 @@ function Catalog({ user }) {
 
         {isSeries && currentEpisode && (
           <p style={{ color: "#ff9800", margin: "0 0 8px 0", fontWeight: 600 }}>
-            Episodio {currentEpisode.number}
+            Temporada {currentEpisode.season || 1} · Episodio {currentEpisode.number}
             {currentEpisode.title ? `: ${currentEpisode.title}` : ""}
           </p>
         )}
@@ -736,60 +733,85 @@ function Catalog({ user }) {
           </div>
         )}
 
-        {/* Episodios (se actualizan solos cuando el admin agrega más) */}
-        {isSeries && selected.episodes?.length > 0 && (
+        {/* EPISODIOS POR TEMPORADA */}
+        {isSeries && seasons.length > 0 && (
           <div style={{ marginBottom: "36px" }}>
             <h2 style={{ margin: "0 0 16px 0", fontSize: "20px" }}>
               Episodios ({selected.episodes.length})
             </h2>
-            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-              {selected.episodes.map((ep, i) => {
-                const num = ep.number || i + 1;
-                const active = currentEpisode?.number === num;
-                return (
-                  <div
-                    key={i}
-                    onClick={() => {
-                      if (!canPlay) return;
-                      setCurrentEpisode({ ...ep, number: num });
-                      addToHistory(selected.id, num);
-                    }}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "14px",
-                      padding: "14px",
-                      background: active ? "#1a2a3a" : "#1a1a1a",
-                      borderRadius: "10px",
-                      cursor: canPlay ? "pointer" : "not-allowed",
-                      opacity: canPlay ? 1 : 0.6,
-                      border: active ? "2px solid #ff6b00" : "1px solid #333"
-                    }}
-                  >
-                    <div style={{
-                      width: "52px",
-                      height: "42px",
-                      background: active ? "#ff6b00" : "#333",
-                      borderRadius: "8px",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      fontWeight: "bold",
-                      color: "#fff",
-                      fontSize: "16px"
-                    }}>
-                      {num}
-                    </div>
-                    <div>
-                      <div style={{ fontWeight: "bold", fontSize: "15px" }}>Episodio {num}</div>
-                      <div style={{ fontSize: "13px", color: active ? "#ffb74d" : "#aaa" }}>
-                        {active ? "▶ Reproduciendo" : ep.title || "Episodio"}
+
+            {seasons.map((seasonNum) => (
+              <div key={seasonNum} style={{ marginBottom: "28px" }}>
+                <h3 style={{
+                  margin: "0 0 12px 0",
+                  fontSize: "16px",
+                  color: "#ffaa55",
+                  borderBottom: "2px solid #ff6b00",
+                  paddingBottom: "8px",
+                  display: "inline-block"
+                }}>
+                  Temporada {seasonNum}
+                  <span style={{ color: "#888", fontWeight: 400, fontSize: "14px", marginLeft: "8px" }}>
+                    ({bySeason[seasonNum].length} episodios)
+                  </span>
+                </h3>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "12px" }}>
+                  {bySeason[seasonNum].map((ep) => {
+                    const num = ep.number;
+                    const active =
+                      currentEpisode?.number === num &&
+                      Number(currentEpisode?.season || 1) === seasonNum;
+
+                    return (
+                      <div
+                        key={`${seasonNum}-${num}-${ep._index}`}
+                        onClick={() => {
+                          if (!canPlay) return;
+                          setCurrentEpisode({ ...ep, number: num, season: seasonNum });
+                          addToHistory(selected.id, num);
+                        }}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "14px",
+                          padding: "14px",
+                          background: active ? "#1a2a3a" : "#1a1a1a",
+                          borderRadius: "10px",
+                          cursor: canPlay ? "pointer" : "not-allowed",
+                          opacity: canPlay ? 1 : 0.6,
+                          border: active ? "2px solid #ff6b00" : "1px solid #333"
+                        }}
+                      >
+                        <div style={{
+                          width: "52px",
+                          height: "42px",
+                          background: active ? "#ff6b00" : "#333",
+                          borderRadius: "8px",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          fontWeight: "bold",
+                          color: "#fff",
+                          fontSize: "16px"
+                        }}>
+                          {num}
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: "bold", fontSize: "15px" }}>
+                            Episodio {num}
+                            {ep.title ? ` · ${ep.title}` : ""}
+                          </div>
+                          <div style={{ fontSize: "13px", color: active ? "#ffb74d" : "#aaa" }}>
+                            {active ? "▶ Reproduciendo" : "Episodio"}
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
         )}
 
