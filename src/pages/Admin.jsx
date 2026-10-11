@@ -19,8 +19,9 @@ function Admin() {
   const [phone, setPhone] = useState("+57 321 640 1956");
   const [newPhone, setNewPhone] = useState("");
 
-  // Planes de suscripción
+  // Planes de suscripción (incluye prueba de 30 minutos)
   const PLANS = {
+    "trial30min": { label: "Prueba 30 min", minutes: 30 },
     "1month": { label: "1 mes", days: 30 },
     "3months": { label: "3 meses", days: 90 },
     "6months": { label: "6 meses", days: 180 },
@@ -34,7 +35,6 @@ function Admin() {
     querySnapshot.forEach((d) => {
       usersList.push({ id: d.id, ...d.data() });
     });
-    // Ordenar: primero los pendientes
     usersList.sort((a, b) => {
       if (a.status === "pending" && b.status !== "pending") return -1;
       if (b.status === "pending" && a.status !== "pending") return 1;
@@ -70,12 +70,22 @@ function Admin() {
     setTimeout(() => setMessage(""), 3500);
   };
 
+  // Calcular fecha de vencimiento según el plan
+  const getExpirationDate = (planKey, fromDate = new Date()) => {
+    const plan = PLANS[planKey];
+    const date = new Date(fromDate);
+    if (plan.minutes) {
+      date.setMinutes(date.getMinutes() + plan.minutes);
+    } else {
+      date.setDate(date.getDate() + plan.days);
+    }
+    return date;
+  };
+
   // Activar usuario + asignar plan
   const activateWithPlan = async (userId, planKey) => {
     try {
-      const plan = PLANS[planKey];
-      const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + plan.days);
+      const expiresAt = getExpirationDate(planKey);
 
       await updateDoc(doc(db, "users", userId), {
         status: "active",
@@ -84,7 +94,7 @@ function Admin() {
         updatedAt: serverTimestamp()
       });
 
-      showMessage(`Usuario activado con plan ${plan.label}`);
+      showMessage(`Usuario activado con plan ${PLANS[planKey].label}`);
       loadUsers();
     } catch (error) {
       console.error(error);
@@ -100,7 +110,6 @@ function Admin() {
       const userData = userSnap.data();
 
       let baseDate = new Date();
-      // Si todavía tiene días, partimos desde la fecha actual de vencimiento
       if (userData.subscriptionExpiresAt?.toDate) {
         const currentExpire = userData.subscriptionExpiresAt.toDate();
         if (currentExpire > baseDate) {
@@ -108,17 +117,16 @@ function Admin() {
         }
       }
 
-      const plan = PLANS[planKey];
-      baseDate.setDate(baseDate.getDate() + plan.days);
+      const expiresAt = getExpirationDate(planKey, baseDate);
 
       await updateDoc(userRef, {
         status: "active",
         subscriptionPlan: planKey,
-        subscriptionExpiresAt: Timestamp.fromDate(baseDate),
+        subscriptionExpiresAt: Timestamp.fromDate(expiresAt),
         updatedAt: serverTimestamp()
       });
 
-      showMessage(`Suscripción extendida (${plan.label})`);
+      showMessage(`Suscripción extendida (${PLANS[planKey].label})`);
       loadUsers();
     } catch (error) {
       console.error(error);
@@ -126,6 +134,23 @@ function Admin() {
     }
   };
 
+  // Desactivar solo la suscripción (el usuario puede entrar pero no reproducir)
+  const deactivateSubscription = async (userId) => {
+    try {
+      await updateDoc(doc(db, "users", userId), {
+        subscriptionPlan: null,
+        subscriptionExpiresAt: Timestamp.fromDate(new Date(0)), // fecha pasada
+        updatedAt: serverTimestamp()
+      });
+      showMessage("Suscripción desactivada");
+      loadUsers();
+    } catch (error) {
+      console.error(error);
+      showMessage("Error al desactivar suscripción");
+    }
+  };
+
+  // Desactivar cuenta completa
   const changeStatus = async (userId, newStatus) => {
     try {
       await updateDoc(doc(db, "users", userId), { status: newStatus });
@@ -149,18 +174,22 @@ function Admin() {
     }
   };
 
-  // Calcular días restantes
   const getDaysLeft = (user) => {
     if (!user.subscriptionExpiresAt?.toDate) return null;
     const expire = user.subscriptionExpiresAt.toDate();
     const now = new Date();
-    const diff = Math.ceil((expire - now) / (1000 * 60 * 60 * 24));
-    return diff;
+    const diffMs = expire - now;
+    if (diffMs <= 0) return -1;
+    // Si es menos de 1 día, mostrar minutos
+    if (diffMs < 24 * 60 * 60 * 1000) {
+      return Math.ceil(diffMs / (1000 * 60)); // minutos
+    }
+    return Math.ceil(diffMs / (1000 * 60 * 60 * 24)); // días
   };
 
   const formatDate = (timestamp) => {
     if (!timestamp?.toDate) return "-";
-    return timestamp.toDate().toLocaleDateString("es-CO");
+    return timestamp.toDate().toLocaleString("es-CO");
   };
 
   if (loading) {
@@ -171,7 +200,6 @@ function Admin() {
     <div style={{ maxWidth: "1100px", margin: "30px auto", padding: "20px", color: "#eee" }}>
       <h1 style={{ marginTop: 0 }}>Panel de Administración</h1>
 
-      {/* Tabs */}
       <div style={{ marginBottom: "20px", display: "flex", gap: "10px", flexWrap: "wrap" }}>
         <button
           onClick={() => setTab("users")}
@@ -215,13 +243,12 @@ function Admin() {
         </p>
       )}
 
-      {/* ========== USUARIOS ========== */}
       {tab === "users" && (
         <div>
-          <h2 style={{ marginBottom: "16px" }}>Usuarios ({users.length})</h2>
+          <h2 style={{ marginBottom: "16px" }}>UsUsuarios ({users.length})</h2>
 
           <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "800px" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "900px" }}>
               <thead>
                 <tr style={{ backgroundColor: "#333" }}>
                   <th style={{ padding: "12px", textAlign: "left" }}>Nombre</th>
@@ -233,9 +260,9 @@ function Admin() {
               </thead>
               <tbody>
                 {users.map((user) => {
-                  const daysLeft = getDaysLeft(user);
-                  const isExpiringSoon = daysLeft !== null && daysLeft <= 7 && daysLeft >= 0;
-                  const isExpired = daysLeft !== null && daysLeft < 0;
+                  const timeLeft = getDaysLeft(user);
+                  const isExpired = timeLeft !== null && timeLeft < 0;
+                  const isExpiringSoon = timeLeft !== null && timeLeft >= 0 && timeLeft <= 7;
 
                   return (
                     <tr key={user.id} style={{ borderBottom: "1px solid #444" }}>
@@ -261,9 +288,14 @@ function Admin() {
                             <div>{PLANS[user.subscriptionPlan]?.label || user.subscriptionPlan}</div>
                             <div style={{ color: isExpiringSoon ? "#ff9800" : isExpired ? "#f44336" : "#aaa" }}>
                               {formatDate(user.subscriptionExpiresAt)}
-                              {daysLeft !== null && (
-                                <span> ({daysLeft >= 0 ? `${daysLeft} días` : "vencido"})</span>
+                              {timeLeft !== null && timeLeft >= 0 && (
+                                <span>
+                                  {" "}({user.subscriptionPlan === "trial30min" || timeLeft < 1
+                                    ? `${timeLeft} min`
+                                    : `${timeLeft} días`})
+                                </span>
                               )}
+                              {isExpired && <span> (vencido)</span>}
                             </div>
                           </>
                         ) : (
@@ -272,7 +304,6 @@ function Admin() {
                       </td>
                       <td style={{ padding: "12px" }}>
                         <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                          {/* Activar con plan */}
                           {(user.status === "pending" || user.status === "disabled") && (
                             <select
                               defaultValue=""
@@ -299,34 +330,49 @@ function Admin() {
                             </select>
                           )}
 
-                          {/* Extender suscripción */}
                           {user.status === "active" && (
-                            <select
-                              defaultValue=""
-                              onChange={(e) => {
-                                if (e.target.value) {
-                                  extendSubscription(user.id, e.target.value);
-                                  e.target.value = "";
-                                }
-                              }}
-                              style={{
-                                padding: "6px 8px",
-                                background: "#2196F3",
-                                color: "white",
-                                border: "none",
-                                borderRadius: "4px",
-                                cursor: "pointer",
-                                fontSize: "13px"
-                              }}
-                            >
-                              <option value="" disabled>Extender...</option>
-                              {Object.entries(PLANS).map(([key, p]) => (
-                                <option key={key} value={key}>{p.label}</option>
-                              ))}
-                            </select>
+                            <>
+                              <select
+                                defaultValue=""
+                                onChange={(e) => {
+                                  if (e.target.value) {
+                                    extendSubscription(user.id, e.target.value);
+                                    e.target.value = "";
+                                  }
+                                }}
+                                style={{
+                                  padding: "6px 8px",
+                                  background: "#2196F3",
+                                  color: "white",
+                                  border: "none",
+                                  borderRadius: "4px",
+                                  cursor: "pointer",
+                                  fontSize: "13px"
+                                }}
+                              >
+                                <option value="" disabled>Extender...</option>
+                                {Object.entries(PLANS).map(([key, p]) => (
+                                  <option key={key} value={key}>{p.label}</option>
+                                ))}
+                              </select>
+
+                              <button
+                                onClick={() => deactivateSubscription(user.id)}
+                                style={{
+                                  padding: "6px 10px",
+                                  backgroundColor: "#e65100",
+                                  color: "white",
+                                  border: "none",
+                                  borderRadius: "4px",
+                                  cursor: "pointer",
+                                  fontSize: "13px"
+                                }}
+                              >
+                                Desactivar suscripción
+                              </button>
+                            </>
                           )}
 
-                          {/* Desactivar */}
                           {user.status !== "disabled" && (
                             <button
                               onClick={() => changeStatus(user.id, "disabled")}
@@ -340,7 +386,7 @@ function Admin() {
                                 fontSize: "13px"
                               }}
                             >
-                              Desactivar
+                              Desactivar cuenta
                             </button>
                           )}
                         </div>
@@ -354,7 +400,6 @@ function Admin() {
         </div>
       )}
 
-      {/* ========== CONFIGURACIÓN ========== */}
       {tab === "settings" && (
         <div>
           <h2 style={{ marginBottom: "16px" }}>Configuración</h2>
