@@ -26,15 +26,17 @@ function ContentAdmin() {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [editingId, setEditingId] = useState(null);
-
   const [title, setTitle] = useState("");
   const [type, setType] = useState("movie");
   const [description, setDescription] = useState("");
   const [poster, setPoster] = useState("");
   const [year, setYear] = useState("");
   const [driveLink, setDriveLink] = useState("");
-  const [seriesStatus, setSeriesStatus] = useState("finished");
-  const [episodes, setEpisodes] = useState([{ number: 1, title: "", link: "" }]);
+  const [trailer, setTrailer] = useState("");
+  const [seriesStatus, setSeriesStatus] = useState("adding"); // adding | finished
+  const [episodes, setEpisodes] = useState([
+    { season: 1, number: 1, title: "", link: "" }
+  ]);
 
   const loadContents = async () => {
     setLoading(true);
@@ -61,26 +63,38 @@ function ContentAdmin() {
     setPoster("");
     setYear("");
     setDriveLink("");
-    setSeriesStatus("finished");
-    setEpisodes([{ number: 1, title: "", link: "" }]);
+    setTrailer("");
+    setSeriesStatus("adding");
+    setEpisodes([{ season: 1, number: 1, title: "", link: "" }]);
     setEditingId(null);
   };
 
   const addEpisodeField = () => {
-    setEpisodes([...episodes, { number: episodes.length + 1, title: "", link: "" }]);
+    const last = episodes[episodes.length - 1];
+    setEpisodes([
+      ...episodes,
+      {
+        season: last?.season || 1,
+        number: (last?.number || 0) + 1,
+        title: "",
+        link: ""
+      }
+    ]);
   };
 
   const updateEpisode = (index, field, value) => {
     const updated = [...episodes];
-    updated[index][field] = value;
+    if (field === "season" || field === "number") {
+      updated[index][field] = Number(value) || 1;
+    } else {
+      updated[index][field] = value;
+    }
     setEpisodes(updated);
   };
 
   const removeEpisode = (index) => {
     if (episodes.length === 1) return;
-    const updated = episodes.filter((_, i) => i !== index);
-    updated.forEach((ep, i) => (ep.number = i + 1));
-    setEpisodes(updated);
+    setEpisodes(episodes.filter((_, i) => i !== index));
   };
 
   const handleEdit = (item) => {
@@ -91,25 +105,38 @@ function ContentAdmin() {
     setPoster(item.poster || "");
     setYear(item.year || "");
     setDriveLink(item.driveLink || "");
-    setSeriesStatus(item.seriesStatus || "finished");
+    setTrailer(item.trailer || "");
+
+    // Compatibilidad con valores viejos
+    if (
+      item.seriesStatus === "finished" ||
+      item.seriesStatus === "finalizada"
+    ) {
+      setSeriesStatus("finished");
+    } else {
+      setSeriesStatus("adding");
+    }
 
     if (item.type === "series" && item.episodes?.length > 0) {
       setEpisodes(
         item.episodes.map((ep, i) => ({
+          season: ep.season || 1,
           number: ep.number || i + 1,
           title: ep.title || "",
-          link: ep.link || ""
+          link: ep.link || ep.driveLink || ""
         }))
       );
     } else {
-      setEpisodes([{ number: 1, title: "", link: "" }]);
+      setEpisodes([{ season: 1, number: 1, title: "", link: "" }]);
     }
+
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setMessage("");
+
     try {
       const data = {
         title,
@@ -117,6 +144,7 @@ function ContentAdmin() {
         description,
         poster,
         year: Number(year) || null,
+        trailer: trailer.trim() || null,
         status: "published",
         seriesStatus: type === "series" ? seriesStatus : null,
         updatedAt: serverTimestamp()
@@ -129,10 +157,12 @@ function ContentAdmin() {
         data.driveLink = "";
         data.episodes = episodes
           .filter((ep) => ep.link.trim() !== "")
-          .map((ep, i) => ({
-            number: i + 1,
+          .map((ep) => ({
+            season: Number(ep.season) || 1,
+            number: Number(ep.number) || 1,
             title: ep.title || "",
-            link: ep.link
+            link: ep.link,
+            driveLink: ep.link
           }));
       }
 
@@ -166,6 +196,11 @@ function ContentAdmin() {
       console.error(e);
       setMessage("Error al eliminar");
     }
+  };
+
+  const statusLabel = (s) => {
+    if (s === "finished" || s === "finalizada") return "Finalizada";
+    return "Añadiéndose";
   };
 
   return (
@@ -202,12 +237,22 @@ function ContentAdmin() {
 
         <div style={{ marginBottom: "14px" }}>
           <label>Título</label>
-          <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} required style={inputStyle} />
+          <input
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            required
+            style={inputStyle}
+          />
         </div>
 
         <div style={{ marginBottom: "14px" }}>
           <label>Tipo</label>
-          <select value={type} onChange={(e) => setType(e.target.value)} style={inputStyle}>
+          <select
+            value={type}
+            onChange={(e) => setType(e.target.value)}
+            style={inputStyle}
+          >
             <option value="movie">Película</option>
             <option value="series">Serie</option>
           </select>
@@ -215,32 +260,77 @@ function ContentAdmin() {
 
         <div style={{ marginBottom: "14px" }}>
           <label>Descripción</label>
-          <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows="3" style={inputStyle} />
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            rows="3"
+            style={inputStyle}
+          />
         </div>
 
         <div style={{ marginBottom: "14px" }}>
           <label>URL de la portada (opcional)</label>
-          <input type="url" value={poster} onChange={(e) => setPoster(e.target.value)} placeholder="https://..." style={inputStyle} />
+          <input
+            type="url"
+            value={poster}
+            onChange={(e) => setPoster(e.target.value)}
+            placeholder="https://..."
+            style={inputStyle}
+          />
         </div>
 
         <div style={{ marginBottom: "14px" }}>
           <label>Año</label>
-          <input type="number" value={year} onChange={(e) => setYear(e.target.value)} style={inputStyle} />
+          <input
+            type="number"
+            value={year}
+            onChange={(e) => setYear(e.target.value)}
+            style={inputStyle}
+          />
+        </div>
+
+        <div style={{ marginBottom: "14px" }}>
+          <label>Tráiler YouTube (opcional)</label>
+          <input
+            type="url"
+            value={trailer}
+            onChange={(e) => setTrailer(e.target.value)}
+            placeholder="https://youtube.com/watch?v=..."
+            style={inputStyle}
+          />
         </div>
 
         {type === "movie" && (
           <div style={{ marginBottom: "14px" }}>
             <label>Enlace (Archive / Drive / YouTube / Mega)</label>
-            <input type="url" value={driveLink} onChange={(e) => setDriveLink(e.target.value)} required placeholder="https://..." style={inputStyle} />
+            <input
+              type="url"
+              value={driveLink}
+              onChange={(e) => setDriveLink(e.target.value)}
+              required
+              placeholder="https://..."
+              style={inputStyle}
+            />
           </div>
         )}
 
         {type === "series" && (
-          <div style={{ marginBottom: "20px", padding: "16px", backgroundColor: "#111", borderRadius: "8px" }}>
+          <div
+            style={{
+              marginBottom: "20px",
+              padding: "16px",
+              backgroundColor: "#111",
+              borderRadius: "8px"
+            }}
+          >
             <div style={{ marginBottom: "14px" }}>
               <label>Estado de la serie</label>
-              <select value={seriesStatus} onChange={(e) => setSeriesStatus(e.target.value)} style={inputStyle}>
-                <option value="airing">En emisión</option>
+              <select
+                value={seriesStatus}
+                onChange={(e) => setSeriesStatus(e.target.value)}
+                style={inputStyle}
+              >
+                <option value="adding">Añadiéndose</option>
                 <option value="finished">Finalizada</option>
               </select>
             </div>
@@ -258,8 +348,19 @@ function ContentAdmin() {
                   border: "1px solid #333"
                 }}
               >
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "10px" }}>
-                  <strong>Episodio {ep.number}</strong>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    marginBottom: "10px",
+                    alignItems: "center",
+                    flexWrap: "wrap",
+                    gap: "8px"
+                  }}
+                >
+                  <strong>
+                    T{ep.season || 1} · Ep {ep.number || index + 1}
+                  </strong>
                   {episodes.length > 1 && (
                     <button
                       type="button"
@@ -278,6 +379,37 @@ function ContentAdmin() {
                     </button>
                   )}
                 </div>
+
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: "10px",
+                    marginBottom: "8px"
+                  }}
+                >
+                  <div>
+                    <label style={{ fontSize: "13px", color: "#aaa" }}>Temporada</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={ep.season || 1}
+                      onChange={(e) => updateEpisode(index, "season", e.target.value)}
+                      style={inputStyle}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: "13px", color: "#aaa" }}>Número de episodio</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={ep.number || index + 1}
+                      onChange={(e) => updateEpisode(index, "number", e.target.value)}
+                      style={inputStyle}
+                    />
+                  </div>
+                </div>
+
                 <input
                   type="text"
                   placeholder="Título del episodio (opcional)"
@@ -354,7 +486,13 @@ function ContentAdmin() {
       ) : contents.length === 0 ? (
         <p style={{ color: "#888" }}>No hay contenido todavía.</p>
       ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "18px" }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
+            gap: "18px"
+          }}
+        >
           {contents.map((item) => (
             <div
               key={item.id}
@@ -366,7 +504,11 @@ function ContentAdmin() {
               }}
             >
               {item.poster ? (
-                <img src={item.poster} alt={item.title} style={{ width: "100%", height: "140px", objectFit: "cover" }} />
+                <img
+                  src={item.poster}
+                  alt={item.title}
+                  style={{ width: "100%", height: "140px", objectFit: "cover" }}
+                />
               ) : (
                 <div
                   style={{
@@ -385,10 +527,11 @@ function ContentAdmin() {
               <div style={{ padding: "12px" }}>
                 <h4 style={{ margin: "0 0 6px 0", fontSize: "15px" }}>{item.title}</h4>
                 <p style={{ margin: "0 0 12px 0", fontSize: "13px", color: "#aaa" }}>
-                  {item.type === "movie" ? "Película" : `Serie • ${item.episodes?.length || 0} eps`}
+                  {item.type === "movie"
+                    ? "Película"
+                    : `Serie • ${item.episodes?.length || 0} eps`}
                   {item.year && ` • ${item.year}`}
-                  {item.type === "series" && item.seriesStatus === "airing" && " • En emisión"}
-                  {item.type === "series" && item.seriesStatus === "finished" && " • Finalizada"}
+                  {item.type === "series" && ` • ${statusLabel(item.seriesStatus)}`}
                 </p>
                 <div style={{ display: "flex", gap: "8px" }}>
                   <button
