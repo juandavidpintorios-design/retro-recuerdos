@@ -10,7 +10,8 @@ import {
   where,
   serverTimestamp,
   getDoc,
-  updateDoc
+  updateDoc,
+  onSnapshot
 } from "firebase/firestore";
 import { db } from "../firebase";
 
@@ -94,66 +95,90 @@ function Catalog({ user }) {
     }
   };
 
+  // Tiempo real: contenido, ratings, favoritos, historial
   useEffect(() => {
     if (!user?.uid) return;
-    loadAll();
-    checkDeviceLimit();
-  }, [user?.uid]);
 
-  const loadAll = async () => {
-    setLoading(true);
-    try {
-      const contentSnap = await getDocs(collection(db, "content"));
+    checkDeviceLimit();
+
+    const unsubContent = onSnapshot(collection(db, "content"), (snap) => {
       const list = [];
-      contentSnap.forEach((d) => list.push({ id: d.id, ...d.data() }));
+      snap.forEach((d) => list.push({ id: d.id, ...d.data() }));
       list.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
       setContents(list);
+      setLoading(false);
 
-      const ratingsSnap = await getDocs(collection(db, "ratings"));
+      // Actualizar la serie/película abierta si cambió (nuevos episodios, etc.)
+      setSelected((prev) => {
+        if (!prev) return null;
+        const updated = list.find((c) => c.id === prev.id);
+        return updated || prev;
+      });
+    });
+
+    const unsubRatings = onSnapshot(collection(db, "ratings"), (snap) => {
       const allRatings = {};
-      ratingsSnap.forEach((d) => {
+      snap.forEach((d) => {
         const data = d.data();
         if (!allRatings[data.contentId]) allRatings[data.contentId] = [];
         allRatings[data.contentId].push(data);
       });
-      const ratingsData = {};
-      list.forEach((item) => {
-        const itemRatings = allRatings[item.id] || [];
-        const count = itemRatings.length;
-        const average =
-          count > 0
-            ? itemRatings.reduce((s, r) => s + Number(r.rating), 0) / count
-            : 0;
-        const userR = itemRatings.find((r) => r.userId === user.uid);
-        ratingsData[item.id] = {
-          average: Math.round(average * 10) / 10,
-          count,
-          userRating: userR ? Number(userR.rating) : 0
-        };
-      });
-      setRatings(ratingsData);
 
-      const favSnap = await getDocs(
-        query(collection(db, "favorites"), where("userId", "==", user.uid))
-      );
-      const favs = {};
-      favSnap.forEach((d) => {
-        favs[d.data().contentId] = true;
+      setRatings((prev) => {
+        // Se recalcula cuando cambian contents; aquí guardamos raw y recalculamos abajo
+        return prev;
       });
-      setFavorites(favs);
 
-      const histSnap = await getDocs(
-        query(collection(db, "history"), where("userId", "==", user.uid))
-      );
-      const hist = [];
-      histSnap.forEach((d) => hist.push({ id: d.id, ...d.data() }));
-      hist.sort((a, b) => (b.watchedAt?.seconds || 0) - (a.watchedAt?.seconds || 0));
-      setHistory(hist.slice(0, 20));
-    } catch (err) {
-      console.error(err);
-    }
-    setLoading(false);
-  };
+      // Recalcular con contents actuales
+      setContents((currentList) => {
+        const ratingsData = {};
+        currentList.forEach((item) => {
+          const itemRatings = allRatings[item.id] || [];
+          const count = itemRatings.length;
+          const average =
+            count > 0
+              ? itemRatings.reduce((s, r) => s + Number(r.rating), 0) / count
+              : 0;
+          const userR = itemRatings.find((r) => r.userId === user.uid);
+          ratingsData[item.id] = {
+            average: Math.round(average * 10) / 10,
+            count,
+            userRating: userR ? Number(userR.rating) : 0
+          };
+        });
+        setRatings(ratingsData);
+        return currentList;
+      });
+    });
+
+    const unsubFav = onSnapshot(
+      query(collection(db, "favorites"), where("userId", "==", user.uid)),
+      (snap) => {
+        const favs = {};
+        snap.forEach((d) => {
+          favs[d.data().contentId] = true;
+        });
+        setFavorites(favs);
+      }
+    );
+
+    const unsubHist = onSnapshot(
+      query(collection(db, "history"), where("userId", "==", user.uid)),
+      (snap) => {
+        const hist = [];
+        snap.forEach((d) => hist.push({ id: d.id, ...d.data() }));
+        hist.sort((a, b) => (b.watchedAt?.seconds || 0) - (a.watchedAt?.seconds || 0));
+        setHistory(hist.slice(0, 20));
+      }
+    );
+
+    return () => {
+      unsubContent();
+      unsubRatings();
+      unsubFav();
+      unsubHist();
+    };
+  }, [user?.uid]);
 
   const getYoutubeId = (link) => {
     if (!link) return null;
@@ -199,18 +224,12 @@ function Catalog({ user }) {
     try {
       if (favorites[contentId]) {
         await deleteDoc(doc(db, "favorites", favId));
-        setFavorites((prev) => {
-          const n = { ...prev };
-          delete n[contentId];
-          return n;
-        });
       } else {
         await setDoc(doc(db, "favorites", favId), {
           userId: user.uid,
           contentId,
           createdAt: serverTimestamp()
         });
-        setFavorites((prev) => ({ ...prev, [contentId]: true }));
       }
     } catch (err) {
       console.error(err);
@@ -247,25 +266,6 @@ function Catalog({ user }) {
         rating: Number(rating),
         updatedAt: new Date()
       });
-      setRatings((prev) => {
-        const cur = prev[contentId] || { average: 0, count: 0, userRating: 0 };
-        const was = cur.userRating > 0;
-        const newCount = was ? cur.count : cur.count + 1;
-        let avg;
-        if (was) {
-          avg = (cur.average * cur.count - cur.userRating + rating) / cur.count;
-        } else {
-          avg = (cur.average * cur.count + rating) / newCount;
-        }
-        return {
-          ...prev,
-          [contentId]: {
-            average: Math.round(avg * 10) / 10,
-            count: newCount,
-            userRating: rating
-          }
-        };
-      });
     } catch (err) {
       console.error(err);
       alert("No se pudo guardar la calificación");
@@ -287,6 +287,24 @@ function Catalog({ user }) {
     }
   };
 
+  // Comentarios en tiempo real cuando hay un seleccionado
+  useEffect(() => {
+    if (!selected?.id) {
+      setComments([]);
+      return;
+    }
+    const unsub = onSnapshot(
+      query(collection(db, "comments"), where("contentId", "==", selected.id)),
+      (snap) => {
+        const list = [];
+        snap.forEach((d) => list.push({ id: d.id, ...d.data() }));
+        list.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+        setComments(list);
+      }
+    );
+    return () => unsub();
+  }, [selected?.id]);
+
   const handleAddComment = async () => {
     if (!newComment.trim() || savingComment || !selected) return;
     setSavingComment(true);
@@ -299,7 +317,6 @@ function Catalog({ user }) {
         createdAt: serverTimestamp()
       });
       setNewComment("");
-      await loadComments(selected.id);
     } catch (err) {
       console.error(err);
       alert("No se pudo publicar el comentario");
@@ -373,7 +390,6 @@ function Catalog({ user }) {
       setCurrentEpisode(null);
     }
     await addToHistory(item.id);
-    await loadComments(item.id);
   };
 
   const handleBack = () => {
@@ -434,7 +450,7 @@ function Catalog({ user }) {
             position: "absolute",
             top: "10px",
             right: "10px",
-            background: "rgba(0,0,0,0.7)",
+            background: "rgba(0, 0, 0, 0.7)",
             border: "none",
             borderRadius: "50%",
             width: "36px",
@@ -720,10 +736,12 @@ function Catalog({ user }) {
           </div>
         )}
 
-        {/* Episodios */}
+        {/* Episodios (se actualizan solos cuando el admin agrega más) */}
         {isSeries && selected.episodes?.length > 0 && (
           <div style={{ marginBottom: "36px" }}>
-            <h2 style={{ margin: "0 0 16px 0", fontSize: "20px" }}>Episodios</h2>
+            <h2 style={{ margin: "0 0 16px 0", fontSize: "20px" }}>
+              Episodios ({selected.episodes.length})
+            </h2>
             <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
               {selected.episodes.map((ep, i) => {
                 const num = ep.number || i + 1;
@@ -931,7 +949,6 @@ function Catalog({ user }) {
         <p style={{ textAlign: "center", color: "#888", marginTop: "60px" }}>Cargando contenido...</p>
       ) : (
         <>
-          {/* Nuevos agregados */}
           {!search && !showFavoritesOnly && filterType === "all" && filterYear === "all" && contents.length > 0 && (
             <div style={{ marginBottom: "36px" }}>
               <h2 style={{ margin: "0 0 16px 0", fontSize: "22px", fontWeight: 700, color: "#ff6b00" }}>
@@ -949,7 +966,6 @@ function Catalog({ user }) {
             </div>
           )}
 
-          {/* Seguir viendo */}
           {!search && !showFavoritesOnly && filterType === "all" && filterYear === "all" && recentHistory.length > 0 && (
             <div style={{ marginBottom: "36px" }}>
               <h2 style={{ margin: "0 0 16px 0", fontSize: "22px", fontWeight: 700 }}>Seguir viendo</h2>
@@ -965,7 +981,6 @@ function Catalog({ user }) {
             </div>
           )}
 
-          {/* Destacados */}
           {!search && !showFavoritesOnly && filterType === "all" && filterYear === "all" && featured.length > 0 && (
             <div style={{ marginBottom: "36px" }}>
               <h2 style={{ margin: "0 0 16px 0", fontSize: "22px", fontWeight: 700 }}>Destacados</h2>

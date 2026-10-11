@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { onAuthStateChanged, signOut } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, onSnapshot } from "firebase/firestore";
 import { auth, db } from "./firebase";
 import Register from "./pages/Register";
 import Login from "./pages/Login";
@@ -20,7 +20,6 @@ function App() {
   const [maintenance, setMaintenance] = useState(null);
   const [checkingUpdate, setCheckingUpdate] = useState(true);
 
-  // Tema: villano (oscuro) | heroe (claro)
   const [theme, setTheme] = useState(() => localStorage.getItem("retro_theme") || "villano");
 
   const toggleTheme = () => {
@@ -36,25 +35,22 @@ function App() {
     header: isHeroe ? "#e8e0d4" : "#1a1a1a",
     text: isHeroe ? "#1a1a1a" : "#fff",
     muted: isHeroe ? "#555" : "#aaa",
-    card: isHeroe ? "#fff" : "#1a1a1a",
     border: isHeroe ? "#d0c8b8" : "#333",
     accent: "#ff6b00"
   };
 
-  // Días restantes de suscripción
   const getDaysLeft = () => {
     if (!user?.subscriptionExpiresAt) return null;
     const expire = user.subscriptionExpiresAt.toDate
       ? user.subscriptionExpiresAt.toDate()
       : new Date(user.subscriptionExpiresAt);
-    const diff = Math.ceil((expire - new Date()) / (1000 * 60 * 60 * 24));
-    return diff;
+    return Math.ceil((expire - new Date()) / (1000 * 60 * 60 * 24));
   };
 
   const daysLeft = getDaysLeft();
   const showSubWarning = daysLeft !== null && daysLeft >= 0 && daysLeft <= 7;
 
-  // Revisar actualizaciones / mantenimiento
+  // Mantenimiento / versión
   useEffect(() => {
     const checkUpdate = async () => {
       try {
@@ -100,6 +96,7 @@ function App() {
     return () => clearInterval(interval);
   }, []);
 
+  // Auth inicial
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
@@ -135,6 +132,39 @@ function App() {
     return () => unsubscribe();
   }, []);
 
+  // Suscripción en tiempo real (sin recargar)
+  useEffect(() => {
+    if (!user?.uid) return;
+
+    const unsub = onSnapshot(doc(db, "users", user.uid), (snap) => {
+      if (!snap.exists()) {
+        setUser(null);
+        return;
+      }
+      const data = snap.data();
+
+      if (data.status !== "active") {
+        signOut(auth);
+        setUser(null);
+        return;
+      }
+
+      setUser((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          displayName: data.displayName || prev.displayName,
+          role: data.role || prev.role,
+          status: data.status,
+          subscriptionPlan: data.subscriptionPlan || null,
+          subscriptionExpiresAt: data.subscriptionExpiresAt || null
+        };
+      });
+    });
+
+    return () => unsub();
+  }, [user?.uid]);
+
   const handleLoginSuccess = (userData) => {
     setUser(userData);
     setPage("catalog");
@@ -151,7 +181,6 @@ function App() {
     setUser(updatedUser);
   };
 
-  // Pantalla de actualización
   if (maintenance && maintenance > new Date()) {
     const mins = Math.max(1, Math.ceil((maintenance - new Date()) / 60000));
     return (
@@ -194,7 +223,6 @@ function App() {
     );
   }
 
-  // ========== USUARIO LOGUEADO ==========
   if (user) {
     if (user.role === "admin" && adminView) {
       return (
@@ -262,7 +290,6 @@ function App() {
 
     return (
       <div style={{ minHeight: "100vh", backgroundColor: colors.bg, color: colors.text }}>
-        {/* Aviso suscripción por vencer */}
         {showSubWarning && (
           <div style={{
             background: daysLeft <= 2 ? "#c62828" : "#e65100",
@@ -278,7 +305,6 @@ function App() {
           </div>
         )}
 
-        {/* Barra superior */}
         <div style={{
           padding: "12px 20px",
           backgroundColor: colors.header,
@@ -320,7 +346,6 @@ function App() {
               </button>
             ))}
 
-            {/* Tema Villano / Héroe */}
             <button
               onClick={toggleTheme}
               style={{
@@ -333,7 +358,6 @@ function App() {
                 fontSize: "13px",
                 fontWeight: 700
               }}
-              title="Cambiar tema"
             >
               {isHeroe ? "😈 Villano" : "🦸 Héroe"}
             </button>
@@ -392,7 +416,7 @@ function App() {
           </div>
         </div>
 
-        {page === "catalog" && <Catalog user={user} theme={theme} />}
+        {page === "catalog" && <Catalog user={user} />}
         {page === "profile" && <Profile user={user} onUserUpdate={handleUserUpdate} />}
         {page === "requests" && <Requests user={user} />}
         {page === "about" && <About />}
@@ -400,7 +424,6 @@ function App() {
     );
   }
 
-  // ========== NO LOGUEADO ==========
   return (
     <div style={{ minHeight: "100vh", backgroundColor: "#111", color: "white" }}>
       {showRegister ? (
