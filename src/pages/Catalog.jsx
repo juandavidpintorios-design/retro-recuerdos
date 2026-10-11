@@ -336,7 +336,10 @@ function Catalog({ user }) {
 
   const StatusBadge = ({ item }) => {
     if (item.type !== "series" || !item.seriesStatus) return null;
-    const isAiring = item.seriesStatus === "airing";
+
+    const isFinished =
+      item.seriesStatus === "finished" || item.seriesStatus === "finalizada";
+
     return (
       <span
         style={{
@@ -345,12 +348,12 @@ function Catalog({ user }) {
           borderRadius: "4px",
           fontSize: "11px",
           fontWeight: "bold",
-          backgroundColor: isAiring ? "#e65100" : "#2e7d32",
+          backgroundColor: isFinished ? "#2e7d32" : "#e65100",
           color: "#fff",
           marginLeft: "6px"
         }}
       >
-        {isAiring ? "EN EMISIÓN" : "FINALIZADA"}
+        {isFinished ? "FINALIZADA" : "AÑADIÉNDOSE"}
       </span>
     );
   };
@@ -492,7 +495,6 @@ function Catalog({ user }) {
     const embedUrl = getEmbedUrl(videoLink);
     const canPlay = isSubActive() && deviceAllowed;
 
-    // Agrupar episodios por temporada
     const bySeason = {};
     if (isSeries && selected.episodes?.length > 0) {
       selected.episodes.forEach((ep, i) => {
@@ -580,7 +582,6 @@ function Catalog({ user }) {
           </p>
         )}
 
-        {/* TRAILER */}
         {selected.trailer && (
           <div style={{ marginBottom: "24px" }}>
             <h3 style={{ margin: "0 0 12px 0", color: "#ffaa55" }}>Tráiler</h3>
@@ -627,7 +628,6 @@ function Catalog({ user }) {
           </div>
         )}
 
-        {/* REPRODUCTOR */}
         {!canPlay ? (
           <div style={{
             padding: "50px",
@@ -733,7 +733,6 @@ function Catalog({ user }) {
           </div>
         )}
 
-        {/* EPISODIOS POR TEMPORADA */}
         {isSeries && seasons.length > 0 && (
           <div style={{ marginBottom: "36px" }}>
             <h2 style={{ margin: "0 0 16px 0", fontSize: "20px" }}>
@@ -815,7 +814,6 @@ function Catalog({ user }) {
           </div>
         )}
 
-        {/* Comentarios */}
         <div style={{ marginTop: "10px", borderTop: "1px solid #333", paddingTop: "24px" }}>
           <h2 style={{ margin: "0 0 16px 0", fontSize: "20px" }}>
             Comentarios ({comments.length})
