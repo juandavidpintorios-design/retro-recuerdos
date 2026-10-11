@@ -163,7 +163,6 @@ function Admin() {
     }
   };
 
-  // Responder solicitud
   const respondRequest = async (requestId, status, adminMessage = "") => {
     try {
       await updateDoc(doc(db, "requests", requestId), {
@@ -180,6 +179,23 @@ function Admin() {
     } catch (error) {
       console.error(error);
       showMessage("Error al actualizar solicitud");
+    }
+  };
+
+  const activateUpdate = async () => {
+    try {
+      const until = new Date();
+      until.setMinutes(until.getMinutes() + 4);
+
+      await setDoc(doc(db, "settings", "app"), {
+        version: Date.now().toString(),
+        maintenanceUntil: Timestamp.fromDate(until)
+      }, { merge: true });
+
+      showMessage("Actualización activada. Bloqueo de 4 minutos iniciado.");
+    } catch (err) {
+      console.error(err);
+      showMessage("Error al activar actualización");
     }
   };
 
@@ -221,13 +237,23 @@ function Admin() {
               fontWeight: 600
             }}
           >
-            {t === "users" ? "Usuarios" : t === "requests" ? `Solicitudes (${requests.filter(r => r.status === "pending").length})` : "Configuración"}
+            {t === "users"
+              ? "Usuarios"
+              : t === "requests"
+              ? `Solicitudes (${requests.filter((r) => r.status === "pending").length})`
+              : "Configuración"}
           </button>
         ))}
       </div>
 
       {message && (
-        <p style={{ padding: "12px", backgroundColor: "#1b5e20", color: "#fff", borderRadius: "6px", marginBottom: "16px" }}>
+        <p style={{
+          padding: "12px",
+          backgroundColor: "#1b5e20",
+          color: "#fff",
+          borderRadius: "6px",
+          marginBottom: "16px"
+        }}>
           {message}
         </p>
       )}
@@ -276,7 +302,12 @@ function Admin() {
                             <div style={{ color: isExpired ? "#f44336" : "#aaa" }}>
                               {formatDate(user.subscriptionExpiresAt)}
                               {timeLeft !== null && timeLeft >= 0 && (
-                                <span> ({user.subscriptionPlan === "trial30min" ? `${timeLeft} min` : `${timeLeft} días`})</span>
+                                <span>
+                                  {" "}
+                                  ({user.subscriptionPlan === "trial30min"
+                                    ? `${timeLeft} min`
+                                    : `${timeLeft} días`})
+                                </span>
                               )}
                               {isExpired && <span> (vencido)</span>}
                             </div>
@@ -296,7 +327,15 @@ function Admin() {
                                   e.target.value = "";
                                 }
                               }}
-                              style={{ padding: "6px 8px", background: "#28a745", color: "white", border: "none", borderRadius: "4px", cursor: "pointer", fontSize: "13px" }}
+                              style={{
+                                padding: "6px 8px",
+                                background: "#28a745",
+                                color: "white",
+                                border: "none",
+                                borderRadius: "4px",
+                                cursor: "pointer",
+                                fontSize: "13px"
+                              }}
                             >
                               <option value="" disabled>Activar + Plan...</option>
                               {Object.entries(PLANS).map(([key, p]) => (
@@ -314,7 +353,15 @@ function Admin() {
                                     e.target.value = "";
                                   }
                                 }}
-                                style={{ padding: "6px 8px", background: "#2196F3", color: "white", border: "none", borderRadius: "4px", cursor: "pointer", fontSize: "13px" }}
+                                style={{
+                                  padding: "6px 8px",
+                                  background: "#2196F3",
+                                  color: "white",
+                                  border: "none",
+                                  borderRadius: "4px",
+                                  cursor: "pointer",
+                                  fontSize: "13px"
+                                }}
                               >
                                 <option value="" disabled>Extender...</option>
                                 {Object.entries(PLANS).map(([key, p]) => (
@@ -323,7 +370,15 @@ function Admin() {
                               </select>
                               <button
                                 onClick={() => deactivateSubscription(user.id)}
-                                style={{ padding: "6px 10px", backgroundColor: "#e65100", color: "white", border: "none", borderRadius: "4px", cursor: "pointer", fontSize: "13px" }}
+                                style={{
+                                  padding: "6px 10px",
+                                  backgroundColor: "#e65100",
+                                  color: "white",
+                                  border: "none",
+                                  borderRadius: "4px",
+                                  cursor: "pointer",
+                                  fontSize: "13px"
+                                }}
                               >
                                 Desactivar suscripción
                               </button>
@@ -332,7 +387,15 @@ function Admin() {
                           {user.status !== "disabled" && (
                             <button
                               onClick={() => changeStatus(user.id, "disabled")}
-                              style={{ padding: "6px 10px", backgroundColor: "#dc3545", color: "white", border: "none", borderRadius: "4px", cursor: "pointer", fontSize: "13px" }}
+                              style={{
+                                padding: "6px 10px",
+                                backgroundColor: "#dc3545",
+                                color: "white",
+                                border: "none",
+                                borderRadius: "4px",
+                                cursor: "pointer",
+                                fontSize: "13px"
+                              }}
                             >
                               Desactivar cuenta
                             </button>
@@ -366,7 +429,13 @@ function Admin() {
                     border: "1px solid #333"
                   }}
                 >
-                  <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: "10px", marginBottom: "10px" }}>
+                  <div style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    flexWrap: "wrap",
+                    gap: "10px",
+                    marginBottom: "10px"
+                  }}>
                     <div>
                       <strong style={{ fontSize: "17px" }}>{req.title}</strong>
                       <div style={{ color: "#888", fontSize: "13px", marginTop: "4px" }}>
@@ -385,15 +454,20 @@ function Admin() {
                         req.status === "unavailable" ? "#dc3545" : "#ffc107",
                       color: req.status === "pending" ? "#000" : "#fff"
                     }}>
-                      {req.status === "available" ? "Disponible" :
-                       req.status === "unavailable" ? "No se pudo agregar" : "En espera"}
+                      {req.status === "available"
+                        ? "Disponible"
+                        : req.status === "unavailable"
+                        ? "No se pudo agregar"
+                        : "En espera"}
                     </span>
                   </div>
 
                   {req.status === "pending" && (
                     <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginTop: "12px" }}>
                       <button
-                        onClick={() => respondRequest(req.id, "available", "Ya está disponible en el catálogo")}
+                        onClick={() =>
+                          respondRequest(req.id, "available", "Ya está disponible en el catálogo")
+                        }
                         style={{
                           padding: "8px 16px",
                           background: "#28a745",
@@ -408,7 +482,10 @@ function Admin() {
                       </button>
                       <button
                         onClick={() => {
-                          const msg = window.prompt("Mensaje para el usuario (opcional):", "Por ahora no fue posible agregarla");
+                          const msg = window.prompt(
+                            "Mensaje para el usuario (opcional):",
+                            "Por ahora no fue posible agregarla"
+                          );
                           respondRequest(req.id, "unavailable", msg || "No se pudo agregar");
                         }}
                         style={{
@@ -442,7 +519,14 @@ function Admin() {
       {tab === "settings" && (
         <div>
           <h2 style={{ marginBottom: "16px" }}>Configuración</h2>
-          <div style={{ background: "#1e1e1e", padding: "24px", borderRadius: "10px", maxWidth: "500px" }}>
+
+          {/* Teléfono */}
+          <div style={{
+            background: "#1e1e1e",
+            padding: "24px",
+            borderRadius: "10px",
+            maxWidth: "500px"
+          }}>
             <h3 style={{ marginTop: 0, color: "#ffcc00" }}>Número de contacto (WhatsApp)</h3>
             <p style={{ color: "#aaa", fontSize: "14px", marginBottom: "12px" }}>
               Este número se muestra a los usuarios cuando se registran.
@@ -479,6 +563,35 @@ function Admin() {
             <p style={{ marginTop: "16px", color: "#888", fontSize: "13px" }}>
               Número actual: <strong style={{ color: "#fff" }}>{phone}</strong>
             </p>
+          </div>
+
+          {/* Actualización forzada */}
+          <div style={{
+            background: "#1e1e1e",
+            padding: "24px",
+            borderRadius: "10px",
+            maxWidth: "500px",
+            marginTop: "24px"
+          }}>
+            <h3 style={{ marginTop: 0, color: "#ffcc00" }}>Actualización de la página</h3>
+            <p style={{ color: "#aaa", fontSize: "14px", marginBottom: "12px" }}>
+              Al activarlo, todos los usuarios se desconectan y la página se bloquea durante 4 minutos.
+              Después deben iniciar sesión otra vez (con la versión nueva).
+            </p>
+            <button
+              onClick={activateUpdate}
+              style={{
+                padding: "12px 20px",
+                background: "#e65100",
+                color: "white",
+                border: "none",
+                borderRadius: "6px",
+                cursor: "pointer",
+                fontWeight: 700
+              }}
+            >
+              Activar actualización (bloqueo 4 min)
+            </button>
           </div>
         </div>
       )}

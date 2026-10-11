@@ -15,8 +15,56 @@ function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showRegister, setShowRegister] = useState(false);
-  const [adminView, setAdminView] = useState(null); // null | "users" | "content"
-  const [page, setPage] = useState("catalog"); // catalog | profile | requests | about
+  const [adminView, setAdminView] = useState(null);
+  const [page, setPage] = useState("catalog");
+  const [maintenance, setMaintenance] = useState(null);
+  const [checkingUpdate, setCheckingUpdate] = useState(true);
+
+  // Revisar actualizaciones / mantenimiento
+  useEffect(() => {
+    const checkUpdate = async () => {
+      try {
+        const snap = await getDoc(doc(db, "settings", "app"));
+        if (!snap.exists()) {
+          setCheckingUpdate(false);
+          return;
+        }
+        const data = snap.data();
+        const remoteVersion = data.version || "1";
+        const localVersion = localStorage.getItem("app_version");
+
+        if (data.maintenanceUntil?.toDate) {
+          const until = data.maintenanceUntil.toDate();
+          if (until > new Date()) {
+            setMaintenance(until);
+            if (auth.currentUser) {
+              await signOut(auth);
+              setUser(null);
+            }
+            setCheckingUpdate(false);
+            return;
+          }
+        }
+
+        setMaintenance(null);
+
+        if (localVersion && localVersion !== remoteVersion) {
+          if (auth.currentUser) {
+            await signOut(auth);
+            setUser(null);
+          }
+        }
+        localStorage.setItem("app_version", remoteVersion);
+      } catch (err) {
+        console.error(err);
+      }
+      setCheckingUpdate(false);
+    };
+
+    checkUpdate();
+    const interval = setInterval(checkUpdate, 20000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -69,7 +117,43 @@ function App() {
     setUser(updatedUser);
   };
 
-  if (loading) {
+  // Pantalla de actualización / mantenimiento
+  if (maintenance && maintenance > new Date()) {
+    const mins = Math.max(1, Math.ceil((maintenance - new Date()) / 60000));
+    return (
+      <div style={{
+        minHeight: "100vh",
+        background: "#0d0221",
+        color: "#fff",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "20px",
+        textAlign: "center"
+      }}>
+        <h1 style={{ color: "#ff6b00", marginBottom: "12px" }}>
+          Actualizando Retro Recuerdos
+        </h1>
+        <p style={{ color: "#ccc", fontSize: "18px", maxWidth: "400px" }}>
+          Estamos aplicando una actualización. El acceso estará disponible en aproximadamente:
+        </p>
+        <p style={{
+          fontSize: "48px",
+          fontWeight: 900,
+          color: "#ffcc00",
+          margin: "20px 0"
+        }}>
+          {mins} min
+        </p>
+        <p style={{ color: "#888" }}>
+          Luego inicia sesión otra vez para continuar.
+        </p>
+      </div>
+    );
+  }
+
+  if (loading || checkingUpdate) {
     return (
       <div style={{
         textAlign: "center",
@@ -85,7 +169,6 @@ function App() {
 
   // ========== USUARIO LOGUEADO ==========
   if (user) {
-    // Panel de administración
     if (user.role === "admin" && adminView) {
       return (
         <div style={{ minHeight: "100vh", backgroundColor: "#111", color: "white" }}>
@@ -153,10 +236,8 @@ function App() {
       );
     }
 
-    // App normal del usuario
     return (
       <div style={{ minHeight: "100vh", backgroundColor: "#111", color: "white" }}>
-        {/* Barra superior */}
         <div style={{
           padding: "12px 20px",
           backgroundColor: "#1a1a1a",
@@ -185,7 +266,6 @@ function App() {
             >
               Catálogo
             </button>
-
             <button
               onClick={() => setPage("profile")}
               style={{
@@ -200,7 +280,6 @@ function App() {
             >
               Mi Perfil
             </button>
-
             <button
               onClick={() => setPage("requests")}
               style={{
@@ -215,7 +294,6 @@ function App() {
             >
               Solicitar
             </button>
-
             <button
               onClick={() => setPage("about")}
               style={{
@@ -285,7 +363,6 @@ function App() {
           </div>
         </div>
 
-        {/* Contenido según la página */}
         {page === "catalog" && <Catalog user={user} />}
         {page === "profile" && <Profile user={user} onUserUpdate={handleUserUpdate} />}
         {page === "requests" && <Requests user={user} />}
