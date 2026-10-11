@@ -29,6 +29,15 @@ function Catalog({ user }) {
   const [savingRating, setSavingRating] = useState(false);
   const [savingComment, setSavingComment] = useState(false);
 
+  // Verificar si la suscripción está activa
+  const isSubActive = () => {
+    if (!user?.subscriptionExpiresAt) return false;
+    const expire = user.subscriptionExpiresAt.toDate
+      ? user.subscriptionExpiresAt.toDate()
+      : new Date(user.subscriptionExpiresAt);
+    return expire > new Date();
+  };
+
   useEffect(() => {
     if (!user?.uid) return;
     loadAll();
@@ -339,7 +348,6 @@ function Catalog({ user }) {
     .filter(Boolean)
     .slice(0, 6);
 
-  // ========== TARJETA DE CONTENIDO ==========
   const ContentCard = ({ item }) => {
     const poster = getPoster(item);
     return (
@@ -441,6 +449,7 @@ function Catalog({ user }) {
     const isSeries = selected.type === "series";
     const videoLink = isSeries ? currentEpisode?.link : selected.driveLink;
     const embedUrl = getEmbedUrl(videoLink);
+    const canPlay = isSubActive();
 
     return (
       <div
@@ -508,6 +517,7 @@ function Catalog({ user }) {
         <p style={{ color: "#aaa", margin: "0 0 16px 0", fontSize: "14px" }}>
           {selected.type === "movie" ? "Película" : "Serie"}
           {selected.year && ` • ${selected.year}`}
+          {selected.genres?.length > 0 && ` • ${selected.genres.join(", ")}`}
         </p>
 
         <div style={{ marginBottom: "20px" }}>
@@ -521,8 +531,27 @@ function Catalog({ user }) {
           </p>
         )}
 
-        {/* REPRODUCTOR */}
-        {videoLink ? (
+        {/* REPRODUCTOR - bloqueado si no hay suscripción activa */}
+        {!canPlay ? (
+          <div
+            style={{
+              padding: "50px",
+              textAlign: "center",
+              background: "#1a1a1a",
+              borderRadius: "12px",
+              marginBottom: "28px",
+              border: "2px solid #e65100"
+            }}
+          >
+            <h3 style={{ color: "#ff9800", marginTop: 0 }}>Suscripción vencida</h3>
+            <p style={{ color: "#ccc" }}>
+              Tu suscripción ha terminado. Puedes ver el catálogo, pero no reproducir contenido.
+            </p>
+            <p style={{ color: "#aaa", fontSize: "14px" }}>
+              Comunícate con el administrador para renovar tu plan.
+            </p>
+          </div>
+        ) : videoLink ? (
           isMegaLink(videoLink) ? (
             <div
               style={{
@@ -624,6 +653,7 @@ function Catalog({ user }) {
                   <div
                     key={i}
                     onClick={() => {
+                      if (!canPlay) return;
                       setCurrentEpisode({ ...ep, number: num });
                       addToHistory(selected.id, num);
                     }}
@@ -634,7 +664,8 @@ function Catalog({ user }) {
                       padding: "14px",
                       background: active ? "#1a2a3a" : "#1a1a1a",
                       borderRadius: "10px",
-                      cursor: "pointer",
+                      cursor: canPlay ? "pointer" : "not-allowed",
+                      opacity: canPlay ? 1 : 0.6,
                       border: active ? "2px solid #ff6b00" : "1px solid #333",
                       transition: "all 0.2s"
                     }}
@@ -763,7 +794,6 @@ function Catalog({ user }) {
         minHeight: "100vh"
       }}
     >
-      {/* Buscador y filtros */}
       <div style={{ marginBottom: "28px" }}>
         <input
           type="text"
@@ -804,8 +834,7 @@ function Catalog({ user }) {
                 background: filterType === t ? "#ff6b00" : "#2a2a2a",
                 color: "#fff",
                 fontSize: "14px",
-                fontWeight: 600,
-                transition: "background 0.2s"
+                fontWeight: 600
               }}
             >
               {t === "all" ? "Todos" : t === "movie" ? "Películas" : "Series"}
@@ -857,7 +886,6 @@ function Catalog({ user }) {
         </p>
       ) : (
         <>
-          {/* Seguir viendo */}
           {!search &&
             !showFavoritesOnly &&
             filterType === "all" &&
@@ -881,7 +909,6 @@ function Catalog({ user }) {
               </div>
             )}
 
-          {/* Destacados */}
           {!search &&
             !showFavoritesOnly &&
             filterType === "all" &&
@@ -905,7 +932,6 @@ function Catalog({ user }) {
               </div>
             )}
 
-          {/* Catálogo */}
           <h2 style={{ margin: "0 0 16px 0", fontSize: "22px", fontWeight: 700 }}>
             {showFavoritesOnly
               ? "Mis favoritos"
