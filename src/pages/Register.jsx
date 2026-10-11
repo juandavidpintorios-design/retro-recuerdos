@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { createUserWithEmailAndPassword } from "firebase/auth";
-import { doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "../firebase";
 
 function Register() {
@@ -10,6 +10,22 @@ function Register() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
+  const [phone, setPhone] = useState("+57 321 640 1956"); // valor por defecto
+
+  // Cargar el número de teléfono desde Firestore
+  useEffect(() => {
+    const loadPhone = async () => {
+      try {
+        const snap = await getDoc(doc(db, "settings", "contact"));
+        if (snap.exists() && snap.data().phone) {
+          setPhone(snap.data().phone);
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    };
+    loadPhone();
+  }, []);
 
   const handleRegister = async (e) => {
     e.preventDefault();
@@ -18,11 +34,9 @@ function Register() {
     setLoading(true);
 
     try {
-      // Crear usuario en Authentication
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
 
-      // Crear documento en Firestore con estado "pending"
       await setDoc(doc(db, "users", user.uid), {
         email: email,
         displayName: displayName,
@@ -32,7 +46,9 @@ function Register() {
         lastLogin: serverTimestamp()
       });
 
-      setSuccess("Cuenta creada correctamente. Espera a que el administrador active tu cuenta.");
+      setSuccess(
+        `Tu cuenta ha sido registrada correctamente.\n\nComunícate con el administrador al número ${phone} para que active tu cuenta.`
+      );
       setEmail("");
       setPassword("");
       setDisplayName("");
@@ -46,56 +62,109 @@ function Register() {
         setError("Error al registrarse. Intenta de nuevo.");
       }
     }
-
     setLoading(false);
   };
 
   return (
-    <div style={{ maxWidth: "400px", margin: "50px auto", padding: "20px", border: "1px solid #ccc", borderRadius: "8px" }}>
-      <h2>Crear cuenta</h2>
-      
+    <div style={{
+      maxWidth: "420px",
+      margin: "50px auto",
+      padding: "28px",
+      background: "linear-gradient(145deg, #1e1e2f, #12121f)",
+      border: "2px solid #ff6b00",
+      borderRadius: "16px",
+      color: "#fff"
+    }}>
+      <h2 style={{ marginTop: 0, textAlign: "center", color: "#ffcc00" }}>Crear cuenta</h2>
+
       <form onSubmit={handleRegister}>
-        <div style={{ marginBottom: "15px" }}>
-          <label>Nombre</label>
+        <div style={{ marginBottom: "16px" }}>
+          <label style={{ display: "block", marginBottom: "6px", color: "#ffaa55" }}>Nombre</label>
           <input
             type="text"
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
             required
-            style={{ width: "100%", padding: "8px", marginTop: "5px" }}
+            style={{
+              width: "100%",
+              padding: "12px",
+              borderRadius: "8px",
+              border: "2px solid #ff6b00",
+              background: "#0d0d1a",
+              color: "white",
+              boxSizing: "border-box"
+            }}
           />
         </div>
 
-        <div style={{ marginBottom: "15px" }}>
-          <label>Correo electrónico</label>
+        <div style={{ marginBottom: "16px" }}>
+          <label style={{ display: "block", marginBottom: "6px", color: "#ffaa55" }}>Correo electrónico</label>
           <input
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
-            style={{ width: "100%", padding: "8px", marginTop: "5px" }}
+            style={{
+              width: "100%",
+              padding: "12px",
+              borderRadius: "8px",
+              border: "2px solid #ff6b00",
+              background: "#0d0d1a",
+              color: "white",
+              boxSizing: "border-box"
+            }}
           />
         </div>
 
-        <div style={{ marginBottom: "15px" }}>
-          <label>Contraseña</label>
+        <div style={{ marginBottom: "16px" }}>
+          <label style={{ display: "block", marginBottom: "6px", color: "#ffaa55" }}>Contraseña</label>
           <input
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
             minLength={6}
-            style={{ width: "100%", padding: "8px", marginTop: "5px" }}
+            style={{
+              width: "100%",
+              padding: "12px",
+              borderRadius: "8px",
+              border: "2px solid #ff6b00",
+              background: "#0d0d1a",
+              color: "white",
+              boxSizing: "border-box"
+            }}
           />
         </div>
 
-        {error && <p style={{ color: "red" }}>{error}</p>}
-        {success && <p style={{ color: "green" }}>{success}</p>}
+        {error && <p style={{ color: "#ff5555", fontWeight: 600 }}>{error}</p>}
+        {success && (
+          <p style={{
+            color: "#55ff88",
+            fontWeight: 600,
+            whiteSpace: "pre-line",
+            background: "#1a2e1a",
+            padding: "12px",
+            borderRadius: "8px"
+          }}>
+            {success}
+          </p>
+        )}
 
-        <button 
-          type="submit" 
+        <button
+          type="submit"
           disabled={loading}
-          style={{ width: "100%", padding: "10px", backgroundColor: "#4CAF50", color: "white", border: "none", borderRadius: "4px", cursor: "pointer" }}
+          style={{
+            width: "100%",
+            padding: "14px",
+            background: "linear-gradient(90deg, #ff6b00, #ff3300)",
+            color: "white",
+            border: "none",
+            borderRadius: "10px",
+            cursor: "pointer",
+            fontWeight: 800,
+            fontSize: "1rem",
+            marginTop: "8px"
+          }}
         >
           {loading ? "Creando cuenta..." : "Registrarse"}
         </button>
