@@ -182,20 +182,43 @@ function Catalog({ user }) {
 
   const getEmbedUrl = (link) => {
     if (!link) return null;
+
+    // Player oficial de partner (geo.dailymotion.com)
+    if (link.includes("geo.dailymotion.com/player/")) {
+      return link;
+    }
+
+    // YouTube
     const yt = getYoutubeId(link);
     if (yt) return `https://www.youtube.com/embed/${yt}?rel=0`;
+
+    // Dailymotion
+    const dm =
+      link.match(/dailymotion\.com\/(?:embed\/)?video\/([a-zA-Z0-9]+)/i) ||
+      link.match(/dai\.ly\/([a-zA-Z0-9]+)/i);
+    if (dm) return `https://www.dailymotion.com/embed/video/${dm[1]}`;
+
+    // Google Drive
     const drive = link.match(/\/d\/([a-zA-Z0-9_-]+)/);
     if (drive) return `https://drive.google.com/file/d/${drive[1]}/preview`;
+
+    // Archive.org
     if (link.includes("archive.org")) {
       if (link.includes("/details/")) return link.replace("/details/", "/embed/");
       if (link.includes("/embed/")) return link;
       const id = link.split("/").filter(Boolean).pop();
       return `https://archive.org/embed/${id}`;
     }
+
     return null;
   };
 
   const isMegaLink = (link) => link && link.includes("mega.nz");
+  const isDailymotionLink = (link) =>
+    link &&
+    (link.includes("dailymotion.com") ||
+      link.includes("dai.ly") ||
+      link.includes("geo.dailymotion.com"));
 
   const getPoster = (item) => {
     if (item.poster) return item.poster;
@@ -336,10 +359,8 @@ function Catalog({ user }) {
 
   const StatusBadge = ({ item }) => {
     if (item.type !== "series" || !item.seriesStatus) return null;
-
     const isFinished =
       item.seriesStatus === "finished" || item.seriesStatus === "finalizada";
-
     return (
       <span
         style={{
@@ -664,7 +685,7 @@ function Catalog({ user }) {
             <p style={{ color: "#ccc" }}>
               {!isSubActive()
                 ? "Tu suscripción ha terminado. Puedes ver el catálogo, pero no reproducir contenido."
-                : "Esta cuenta ya está siendo usada en 4 dispositivos. Elimina uno desde Mi Perfil para poder ver aquí."}
+                : "Esta cuenta ya está siendo usada en 4 dispositivos. Elimina uno desde Mi Perfil."}
             </p>
           </div>
         ) : videoLink ? (
@@ -696,29 +717,73 @@ function Catalog({ user }) {
               </a>
             </div>
           ) : embedUrl ? (
+            <div style={{ marginBottom: "28px" }}>
+              <div style={{
+                position: "relative",
+                paddingBottom: "56.25%",
+                height: 0,
+                overflow: "hidden",
+                borderRadius: "12px",
+                background: "#000",
+                border: "1px solid #333"
+              }}>
+                <iframe
+                  src={embedUrl}
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    width: "100%",
+                    height: "100%",
+                    border: "none"
+                  }}
+                  allow="autoplay; encrypted-media; fullscreen"
+                  allowFullScreen
+                />
+              </div>
+              {isDailymotionLink(videoLink) && (
+                <p style={{ textAlign: "center", marginTop: "12px" }}>
+                  <a
+                    href={
+                      videoLink.includes("geo.dailymotion.com")
+                        ? `https://www.dailymotion.com/video/${videoLink.match(/video=([a-zA-Z0-9]+)/)?.[1] || ""}`
+                        : videoLink
+                    }
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ color: "#00aaff", fontSize: "14px" }}
+                  >
+                    Si no carga, abrir en Dailymotion ↗
+                  </a>
+                </p>
+              )}
+            </div>
+          ) : isDailymotionLink(videoLink) ? (
             <div style={{
-              position: "relative",
-              paddingBottom: "56.25%",
-              height: 0,
-              overflow: "hidden",
+              padding: "50px",
+              background: "#111",
               borderRadius: "12px",
-              background: "#000",
+              textAlign: "center",
               marginBottom: "28px",
               border: "1px solid #333"
             }}>
-              <iframe
-                src={embedUrl}
+              <a
+                href={videoLink}
+                target="_blank"
+                rel="noopener noreferrer"
                 style={{
-                  position: "absolute",
-                  top: 0,
-                  left: 0,
-                  width: "100%",
-                  height: "100%",
-                  border: "none"
+                  display: "inline-block",
+                  padding: "16px 36px",
+                  background: "#0066DC",
+                  color: "#fff",
+                  fontWeight: "bold",
+                  borderRadius: "10px",
+                  textDecoration: "none",
+                  fontSize: "16px"
                 }}
-                allow="autoplay; encrypted-media; fullscreen"
-                allowFullScreen
-              />
+              >
+                Ver en Dailymotion
+              </a>
             </div>
           ) : (
             <div style={{
@@ -730,6 +795,10 @@ function Catalog({ user }) {
               marginBottom: "28px"
             }}>
               No se pudo cargar el video
+              <br />
+              <small style={{ color: "#666" }}>
+                Admitidos: Archive, YouTube, Drive, Mega, Dailymotion
+              </small>
             </div>
           )
         ) : (
