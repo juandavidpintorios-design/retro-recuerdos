@@ -33,7 +33,8 @@ function ContentAdmin() {
   const [year, setYear] = useState("");
   const [driveLink, setDriveLink] = useState("");
   const [trailer, setTrailer] = useState("");
-  const [seriesStatus, setSeriesStatus] = useState("adding"); // adding | finished
+  const [artists, setArtists] = useState("");
+  const [seriesStatus, setSeriesStatus] = useState("adding");
   const [episodes, setEpisodes] = useState([
     { season: 1, number: 1, title: "", link: "" }
   ]);
@@ -64,6 +65,7 @@ function ContentAdmin() {
     setYear("");
     setDriveLink("");
     setTrailer("");
+    setArtists("");
     setSeriesStatus("adding");
     setEpisodes([{ season: 1, number: 1, title: "", link: "" }]);
     setEditingId(null);
@@ -106,12 +108,13 @@ function ContentAdmin() {
     setYear(item.year || "");
     setDriveLink(item.driveLink || "");
     setTrailer(item.trailer || "");
+    setArtists(
+      Array.isArray(item.artists)
+        ? item.artists.join(", ")
+        : item.artists || ""
+    );
 
-    // Compatibilidad con valores viejos
-    if (
-      item.seriesStatus === "finished" ||
-      item.seriesStatus === "finalizada"
-    ) {
+    if (item.seriesStatus === "finished" || item.seriesStatus === "finalizada") {
       setSeriesStatus("finished");
     } else {
       setSeriesStatus("adding");
@@ -145,6 +148,10 @@ function ContentAdmin() {
         poster,
         year: Number(year) || null,
         trailer: trailer.trim() || null,
+        artists: artists
+          .split(",")
+          .map((a) => a.trim())
+          .filter(Boolean),
         status: "published",
         seriesStatus: type === "series" ? seriesStatus : null,
         updatedAt: serverTimestamp()
@@ -285,6 +292,17 @@ function ContentAdmin() {
             type="number"
             value={year}
             onChange={(e) => setYear(e.target.value)}
+            style={inputStyle}
+          />
+        </div>
+
+        <div style={{ marginBottom: "14px" }}>
+          <label>Artistas / Estrellas (separados por coma)</label>
+          <input
+            type="text"
+            value={artists}
+            onChange={(e) => setArtists(e.target.value)}
+            placeholder="Vicente Fernández, Antonio Aguilar, Ana Gabriel"
             style={inputStyle}
           />
         </div>
@@ -533,6 +551,14 @@ function ContentAdmin() {
                   {item.year && ` • ${item.year}`}
                   {item.type === "series" && ` • ${statusLabel(item.seriesStatus)}`}
                 </p>
+                {item.artists?.length > 0 && (
+                  <p style={{ margin: "0 0 10px 0", fontSize: "12px", color: "#ffb74d" }}>
+                    {Array.isArray(item.artists)
+                      ? item.artists.slice(0, 3).join(", ")
+                      : item.artists}
+                    {Array.isArray(item.artists) && item.artists.length > 3 ? "…" : ""}
+                  </p>
+                )}
                 <div style={{ display: "flex", gap: "8px" }}>
                   <button
                     onClick={() => handleEdit(item)}

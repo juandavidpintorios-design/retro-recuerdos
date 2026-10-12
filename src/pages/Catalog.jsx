@@ -389,7 +389,12 @@ function Catalog({ user }) {
     if (filterType !== "all" && item.type !== filterType) return false;
     if (filterYear !== "all" && String(item.year) !== String(filterYear)) return false;
     if (search.trim()) {
-      if (!item.title?.toLowerCase().includes(search.toLowerCase().trim())) return false;
+      const q = search.toLowerCase().trim();
+      const inTitle = item.title?.toLowerCase().includes(q);
+      const inArtists = Array.isArray(item.artists)
+        ? item.artists.some((a) => a.toLowerCase().includes(q))
+        : String(item.artists || "").toLowerCase().includes(q);
+      if (!inTitle && !inArtists) return false;
     }
     return true;
   });
@@ -480,13 +485,20 @@ function Catalog({ user }) {
             {item.year && ` • ${item.year}`}
             <StatusBadge item={item} />
           </p>
+          {item.artists?.length > 0 && (
+            <p style={{ margin: "0 0 6px 0", fontSize: "11px", color: "#ffb74d" }}>
+              {Array.isArray(item.artists)
+                ? item.artists.slice(0, 2).join(", ")
+                : item.artists}
+              {Array.isArray(item.artists) && item.artists.length > 2 ? "…" : ""}
+            </p>
+          )}
           <Stars contentId={item.id} size={14} />
         </div>
       </div>
     );
   };
 
-  // ========== VISTA DETALLE ==========
   if (selected) {
     const isSeries = selected.type === "series";
     const videoLink = isSeries
@@ -565,11 +577,20 @@ function Catalog({ user }) {
           </p>
         )}
 
-        <p style={{ color: "#aaa", margin: "0 0 16px 0", fontSize: "14px" }}>
+        <p style={{ color: "#aaa", margin: "0 0 8px 0", fontSize: "14px" }}>
           {selected.type === "movie" ? "Película" : "Serie"}
           {selected.year && ` • ${selected.year}`}
           {selected.genres?.length > 0 && ` • ${selected.genres.join(", ")}`}
         </p>
+
+        {selected.artists?.length > 0 && (
+          <p style={{ color: "#ffb74d", margin: "0 0 16px 0", fontSize: "14px" }}>
+            <strong style={{ color: "#ccc" }}>Estrellas: </strong>
+            {Array.isArray(selected.artists)
+              ? selected.artists.join(", ")
+              : selected.artists}
+          </p>
+        )}
 
         <div style={{ marginBottom: "20px" }}>
           <p style={{ margin: "0 0 6px 0", fontSize: "14px", color: "#ccc" }}>Tu calificación:</p>
@@ -645,11 +666,6 @@ function Catalog({ user }) {
                 ? "Tu suscripción ha terminado. Puedes ver el catálogo, pero no reproducir contenido."
                 : "Esta cuenta ya está siendo usada en 4 dispositivos. Elimina uno desde Mi Perfil para poder ver aquí."}
             </p>
-            <p style={{ color: "#aaa", fontSize: "14px" }}>
-              {!isSubActive()
-                ? "Comunícate con el administrador para renovar tu plan."
-                : "Ve a Mi Perfil → Dispositivos para gestionarlos."}
-            </p>
           </div>
         ) : videoLink ? (
           isMegaLink(videoLink) ? (
@@ -714,10 +730,6 @@ function Catalog({ user }) {
               marginBottom: "28px"
             }}>
               No se pudo cargar el video
-              <br />
-              <small style={{ color: "#666" }}>
-                Solo se admiten Archive, YouTube, Google Drive o Mega
-              </small>
             </div>
           )
         ) : (
@@ -885,13 +897,12 @@ function Catalog({ user }) {
     );
   }
 
-  // ========== CATÁLOGO PRINCIPAL ==========
   return (
     <div style={{ padding: "20px", maxWidth: "1400px", margin: "0 auto", color: "#fff", minHeight: "100vh" }}>
       <div style={{ marginBottom: "28px" }}>
         <input
           type="text"
-          placeholder="Buscar por título..."
+          placeholder="Buscar por título o artista..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           style={{
