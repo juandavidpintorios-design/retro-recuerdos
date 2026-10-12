@@ -26,6 +26,11 @@ function ContentAdmin() {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [editingId, setEditingId] = useState(null);
+
+  // Lista: pestaña + búsqueda
+  const [listTab, setListTab] = useState("series"); // "series" | "movie"
+  const [listSearch, setListSearch] = useState("");
+
   const [title, setTitle] = useState("");
   const [type, setType] = useState("movie");
   const [description, setDescription] = useState("");
@@ -109,9 +114,7 @@ function ContentAdmin() {
     setDriveLink(item.driveLink || "");
     setTrailer(item.trailer || "");
     setArtists(
-      Array.isArray(item.artists)
-        ? item.artists.join(", ")
-        : item.artists || ""
+      Array.isArray(item.artists) ? item.artists.join(", ") : item.artists || ""
     );
 
     if (item.seriesStatus === "finished" || item.seriesStatus === "finalizada") {
@@ -133,6 +136,8 @@ function ContentAdmin() {
       setEpisodes([{ season: 1, number: 1, title: "", link: "" }]);
     }
 
+    // Al editar, cambia a la pestaña correcta
+    setListTab(item.type === "series" ? "series" : "movie");
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -210,6 +215,20 @@ function ContentAdmin() {
     return "Añadiéndose";
   };
 
+  // Lista filtrada por pestaña + búsqueda
+  const filteredList = contents.filter((item) => {
+    if (listTab === "series" && item.type !== "series") return false;
+    if (listTab === "movie" && item.type !== "movie") return false;
+    if (listSearch.trim()) {
+      const q = listSearch.toLowerCase().trim();
+      if (!item.title?.toLowerCase().includes(q)) return false;
+    }
+    return true;
+  });
+
+  const seriesCount = contents.filter((c) => c.type === "series").length;
+  const movieCount = contents.filter((c) => c.type === "movie").length;
+
   return (
     <div style={{ maxWidth: "1000px", margin: "30px auto", padding: "20px", color: "#fff" }}>
       <h1>{editingId ? "Editar contenido" : "Administrar Películas y Series"}</h1>
@@ -228,6 +247,7 @@ function ContentAdmin() {
         </p>
       )}
 
+      {/* ========== FORMULARIO ========== */}
       <form
         onSubmit={handleSubmit}
         style={{
@@ -239,7 +259,7 @@ function ContentAdmin() {
         }}
       >
         <h3 style={{ marginTop: 0 }}>
-          {editingId ? "Editando contenido" : "Agregar nuevo contenido"}
+          {editingId ? `Editando: ${title}` : "Agregar nuevo contenido"}
         </h3>
 
         <div style={{ marginBottom: "14px" }}>
@@ -302,7 +322,7 @@ function ContentAdmin() {
             type="text"
             value={artists}
             onChange={(e) => setArtists(e.target.value)}
-            placeholder="Vicente Fernández, Antonio Aguilar, Ana Gabriel"
+            placeholder="Vicente Fernández, Antonio Aguilar"
             style={inputStyle}
           />
         </div>
@@ -353,7 +373,9 @@ function ContentAdmin() {
               </select>
             </div>
 
-            <h4 style={{ marginTop: 0 }}>Episodios</h4>
+            <h4 style={{ marginTop: 0 }}>
+              Episodios ({episodes.filter((e) => e.link.trim()).length})
+            </h4>
 
             {episodes.map((ep, index) => (
               <div
@@ -417,7 +439,7 @@ function ContentAdmin() {
                     />
                   </div>
                   <div>
-                    <label style={{ fontSize: "13px", color: "#aaa" }}>Número de episodio</label>
+                    <label style={{ fontSize: "13px", color: "#aaa" }}>Número</label>
                     <input
                       type="number"
                       min="1"
@@ -437,7 +459,7 @@ function ContentAdmin() {
                 />
                 <input
                   type="url"
-                  placeholder="Enlace del episodio (Archive / Drive / YouTube / Mega)"
+                  placeholder="Enlace del episodio"
                   value={ep.link}
                   onChange={(e) => updateEpisode(index, "link", e.target.value)}
                   required
@@ -497,105 +519,166 @@ function ContentAdmin() {
         </div>
       </form>
 
-      <h3>Contenido actual ({contents.length})</h3>
+      {/* ========== LISTA CON PESTAÑAS + BUSCADOR ========== */}
+      <div
+        style={{
+          border: "1px solid #444",
+          borderRadius: "10px",
+          padding: "20px",
+          backgroundColor: "#1a1a1a"
+        }}
+      >
+        <h3 style={{ marginTop: 0, marginBottom: "16px" }}>Contenido guardado</h3>
 
-      {loading ? (
-        <p>Cargando...</p>
-      ) : contents.length === 0 ? (
-        <p style={{ color: "#888" }}>No hay contenido todavía.</p>
-      ) : (
-        <div
+        {/* Pestañas */}
+        <div style={{ display: "flex", gap: "10px", marginBottom: "14px", flexWrap: "wrap" }}>
+          <button
+            type="button"
+            onClick={() => setListTab("series")}
+            style={{
+              padding: "10px 20px",
+              borderRadius: "8px",
+              border: "none",
+              cursor: "pointer",
+              fontWeight: 600,
+              background: listTab === "series" ? "#ff6b00" : "#333",
+              color: "#fff"
+            }}
+          >
+            Series ({seriesCount})
+          </button>
+          <button
+            type="button"
+            onClick={() => setListTab("movie")}
+            style={{
+              padding: "10px 20px",
+              borderRadius: "8px",
+              border: "none",
+              cursor: "pointer",
+              fontWeight: 600,
+              background: listTab === "movie" ? "#ff6b00" : "#333",
+              color: "#fff"
+            }}
+          >
+            Películas ({movieCount})
+          </button>
+        </div>
+
+        {/* Buscador */}
+        <input
+          type="text"
+          value={listSearch}
+          onChange={(e) => setListSearch(e.target.value)}
+          placeholder={
+            listTab === "series"
+              ? "Buscar serie por título para agregar episodios..."
+              : "Buscar película por título..."
+          }
           style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
-            gap: "18px"
+            ...inputStyle,
+            marginBottom: "18px",
+            fontSize: "15px",
+            border: "1px solid #ff6b00"
           }}
-        >
-          {contents.map((item) => (
-            <div
-              key={item.id}
-              style={{
-                border: "1px solid #444",
-                borderRadius: "10px",
-                overflow: "hidden",
-                backgroundColor: "#1a1a1a"
-              }}
-            >
-              {item.poster ? (
-                <img
-                  src={item.poster}
-                  alt={item.title}
-                  style={{ width: "100%", height: "140px", objectFit: "cover" }}
-                />
-              ) : (
-                <div
-                  style={{
-                    width: "100%",
-                    height: "140px",
-                    backgroundColor: "#333",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    color: "#777"
-                  }}
-                >
-                  Sin portada
-                </div>
-              )}
-              <div style={{ padding: "12px" }}>
-                <h4 style={{ margin: "0 0 6px 0", fontSize: "15px" }}>{item.title}</h4>
-                <p style={{ margin: "0 0 12px 0", fontSize: "13px", color: "#aaa" }}>
-                  {item.type === "movie"
-                    ? "Película"
-                    : `Serie • ${item.episodes?.length || 0} eps`}
-                  {item.year && ` • ${item.year}`}
-                  {item.type === "series" && ` • ${statusLabel(item.seriesStatus)}`}
-                </p>
-                {item.artists?.length > 0 && (
-                  <p style={{ margin: "0 0 10px 0", fontSize: "12px", color: "#ffb74d" }}>
-                    {Array.isArray(item.artists)
-                      ? item.artists.slice(0, 3).join(", ")
-                      : item.artists}
-                    {Array.isArray(item.artists) && item.artists.length > 3 ? "…" : ""}
-                  </p>
+        />
+
+        {loading ? (
+          <p>Cargando...</p>
+        ) : filteredList.length === 0 ? (
+          <p style={{ color: "#888" }}>
+            {listSearch
+              ? `No hay resultados para "${listSearch}"`
+              : listTab === "series"
+              ? "No hay series todavía."
+              : "No hay películas todavía."}
+          </p>
+        ) : (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
+              gap: "18px"
+            }}
+          >
+            {filteredList.map((item) => (
+              <div
+                key={item.id}
+                style={{
+                  border: "1px solid #444",
+                  borderRadius: "10px",
+                  overflow: "hidden",
+                  backgroundColor: "#111"
+                }}
+              >
+                {item.poster ? (
+                  <img
+                    src={item.poster}
+                    alt={item.title}
+                    style={{ width: "100%", height: "140px", objectFit: "cover" }}
+                  />
+                ) : (
+                  <div
+                    style={{
+                      width: "100%",
+                      height: "140px",
+                      backgroundColor: "#333",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      color: "#777"
+                    }}
+                  >
+                    Sin portada
+                  </div>
                 )}
-                <div style={{ display: "flex", gap: "8px" }}>
-                  <button
-                    onClick={() => handleEdit(item)}
-                    style={{
-                      flex: 1,
-                      padding: "7px",
-                      backgroundColor: "#2196F3",
-                      color: "white",
-                      border: "none",
-                      borderRadius: "4px",
-                      cursor: "pointer",
-                      fontSize: "13px"
-                    }}
-                  >
-                    Editar
-                  </button>
-                  <button
-                    onClick={() => handleDelete(item.id)}
-                    style={{
-                      flex: 1,
-                      padding: "7px",
-                      backgroundColor: "#dc3545",
-                      color: "white",
-                      border: "none",
-                      borderRadius: "4px",
-                      cursor: "pointer",
-                      fontSize: "13px"
-                    }}
-                  >
-                    Eliminar
-                  </button>
+                <div style={{ padding: "12px" }}>
+                  <h4 style={{ margin: "0 0 6px 0", fontSize: "15px" }}>{item.title}</h4>
+                  <p style={{ margin: "0 0 12px 0", fontSize: "13px", color: "#aaa" }}>
+                    {item.type === "movie"
+                      ? "Película"
+                      : `Serie • ${item.episodes?.length || 0} eps`}
+                    {item.year && ` • ${item.year}`}
+                    {item.type === "series" && ` • ${statusLabel(item.seriesStatus)}`}
+                  </p>
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    <button
+                      onClick={() => handleEdit(item)}
+                      style={{
+                        flex: 1,
+                        padding: "8px",
+                        backgroundColor: "#2196F3",
+                        color: "white",
+                        border: "none",
+                        borderRadius: "4px",
+                        cursor: "pointer",
+                        fontSize: "13px",
+                        fontWeight: 600
+                      }}
+                    >
+                      {item.type === "series" ? "Editar / + Eps" : "Editar"}
+                    </button>
+                    <button
+                      onClick={() => handleDelete(item.id)}
+                      style={{
+                        flex: 1,
+                        padding: "8px",
+                        backgroundColor: "#dc3545",
+                        color: "white",
+                        border: "none",
+                        borderRadius: "4px",
+                        cursor: "pointer",
+                        fontSize: "13px"
+                      }}
+                    >
+                      Eliminar
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
-      )}
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
