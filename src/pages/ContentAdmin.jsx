@@ -28,7 +28,7 @@ function ContentAdmin() {
   const [editingId, setEditingId] = useState(null);
 
   // Lista: pestaña + búsqueda
-  const [listTab, setListTab] = useState("series"); // "series" | "movie"
+  const [listTab, setListTab] = useState("series");
   const [listSearch, setListSearch] = useState("");
 
   const [title, setTitle] = useState("");
@@ -136,7 +136,6 @@ function ContentAdmin() {
       setEpisodes([{ season: 1, number: 1, title: "", link: "" }]);
     }
 
-    // Al editar, cambia a la pestaña correcta
     setListTab(item.type === "series" ? "series" : "movie");
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -215,7 +214,6 @@ function ContentAdmin() {
     return "Añadiéndose";
   };
 
-  // Lista filtrada por pestaña + búsqueda
   const filteredList = contents.filter((item) => {
     if (listTab === "series" && item.type !== "series") return false;
     if (listTab === "movie" && item.type !== "movie") return false;
@@ -247,7 +245,6 @@ function ContentAdmin() {
         </p>
       )}
 
-      {/* ========== FORMULARIO ========== */}
       <form
         onSubmit={handleSubmit}
         style={{
@@ -340,7 +337,7 @@ function ContentAdmin() {
 
         {type === "movie" && (
           <div style={{ marginBottom: "14px" }}>
-            <label>Enlace (Archive / Drive / YouTube / Mega)</label>
+            <label>Enlace (Archive / Drive / YouTube / Mega / Dailymotion)</label>
             <input
               type="url"
               value={driveLink}
@@ -459,7 +456,7 @@ function ContentAdmin() {
                 />
                 <input
                   type="url"
-                  placeholder="Enlace del episodio"
+                  placeholder="Enlace (Archive / Drive / YouTube / Mega / Dailymotion)"
                   value={ep.link}
                   onChange={(e) => updateEpisode(index, "link", e.target.value)}
                   required
@@ -519,7 +516,7 @@ function ContentAdmin() {
         </div>
       </form>
 
-      {/* ========== LISTA CON PESTAÑAS + BUSCADOR ========== */}
+      {/* LISTA CON PESTAÑAS + BUSCADOR */}
       <div
         style={{
           border: "1px solid #444",
@@ -530,7 +527,6 @@ function ContentAdmin() {
       >
         <h3 style={{ marginTop: 0, marginBottom: "16px" }}>Contenido guardado</h3>
 
-        {/* Pestañas */}
         <div style={{ display: "flex", gap: "10px", marginBottom: "14px", flexWrap: "wrap" }}>
           <button
             type="button"
@@ -564,7 +560,6 @@ function ContentAdmin() {
           </button>
         </div>
 
-        {/* Buscador */}
         <input
           type="text"
           value={listSearch}
@@ -640,6 +635,14 @@ function ContentAdmin() {
                     {item.year && ` • ${item.year}`}
                     {item.type === "series" && ` • ${statusLabel(item.seriesStatus)}`}
                   </p>
+                  {item.artists?.length > 0 && (
+                    <p style={{ margin: "0 0 10px 0", fontSize: "12px", color: "#ffb74d" }}>
+                      {Array.isArray(item.artists)
+                        ? item.artists.slice(0, 3).join(", ")
+                        : item.artists}
+                      {Array.isArray(item.artists) && item.artists.length > 3 ? "…" : ""}
+                    </p>
+                  )}
                   <div style={{ display: "flex", gap: "8px" }}>
                     <button
                       onClick={() => handleEdit(item)}
