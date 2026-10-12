@@ -7,7 +7,8 @@ import {
   getDoc,
   setDoc,
   serverTimestamp,
-  Timestamp
+  Timestamp,
+  onSnapshot
 } from "firebase/firestore";
 import { db } from "../firebase";
 
@@ -21,7 +22,7 @@ function Admin() {
   const [newPhone, setNewPhone] = useState("");
 
   const PLANS = {
-    "trial30min": { label: "Prueba 30 min", minutes: 30 },
+    trial30min: { label: "Prueba 30 min", minutes: 30 },
     "1month": { label: "1 mes", days: 30 },
     "3months": { label: "3 meses", days: 90 },
     "6months": { label: "6 meses", days: 180 },
@@ -29,16 +30,13 @@ function Admin() {
     "2years": { label: "2 años", days: 730 }
   };
 
-  const loadUsers = async () => {
-    const querySnapshot = await getDocs(collection(db, "users"));
-    const usersList = [];
-    querySnapshot.forEach((d) => usersList.push({ id: d.id, ...d.data() }));
-    usersList.sort((a, b) => {
-      if (a.status === "pending" && b.status !== "pending") return -1;
-      if (b.status === "pending" && a.status !== "pending") return 1;
-      return 0;
-    });
-    setUsers(usersList);
+  // En línea = última actividad hace menos de 2 minutos
+  const isOnline = (u) => {
+    if (!u.lastActiveAt) return false;
+    const last = u.lastActiveAt.toDate
+      ? u.lastActiveAt.toDate()
+      : new Date(u.lastActiveAt);
+    return Date.now() - last.getTime() < 2 * 60 * 1000;
   };
 
   const loadRequests = async () => {
@@ -62,14 +60,36 @@ function Admin() {
   };
 
   useEffect(() => {
-    const loadAll = async () => {
-      setLoading(true);
-      await loadUsers();
-      await loadRequests();
-      await loadPhone();
+    setLoading(true);
+
+    // Usuarios en tiempo real (para ver quién está viendo)
+    const unsubUsers = onSnapshot(collection(db, "users"), (snap) => {
+      const usersList = [];
+      snap.forEach((d) => usersList.push({ id: d.id, ...d.data() }));
+      usersList.sort((a, b) => {
+        const aOn = isOnline(a) ? 1 : 0;
+        const bOn = isOnline(b) ? 1 : 0;
+        if (bOn !== aOn) return bOn - aOn;
+        if (a.status === "pending" && b.status !== "pending") return -1;
+        if (b.status === "pending" && a.status !== "pending") return 1;
+        return 0;
+      });
+      setUsers(usersList);
       setLoading(false);
+    });
+
+    loadRequests();
+    loadPhone();
+
+    // Refrescar “en línea” cada 30s (por el reloj de 2 min)
+    const tick = setInterval(() => {
+      setUsers((prev) => [...prev]);
+    }, 30000);
+
+    return () => {
+      unsubUsers();
+      clearInterval(tick);
     };
-    loadAll();
   }, []);
 
   const showMessage = (text) => {
@@ -95,7 +115,6 @@ function Admin() {
         updatedAt: serverTimestamp()
       });
       showMessage(`Usuario activado con plan ${PLANS[planKey].label}`);
-      loadUsers();
     } catch (error) {
       console.error(error);
       showMessage("Error al activar usuario");
@@ -120,7 +139,6 @@ function Admin() {
         updatedAt: serverTimestamp()
       });
       showMessage(`Suscripción extendida (${PLANS[planKey].label})`);
-      loadUsers();
     } catch (error) {
       console.error(error);
       showMessage("Error al extender suscripción");
@@ -135,7 +153,6 @@ function Admin() {
         updatedAt: serverTimestamp()
       });
       showMessage("Suscripción desactivada");
-      loadUsers();
     } catch (error) {
       console.error(error);
       showMessage("Error al desactivar suscripción");
@@ -146,7 +163,6 @@ function Admin() {
     try {
       await updateDoc(doc(db, "users", userId), { status: newStatus });
       showMessage(`Usuario ${newStatus === "active" ? "activado" : "desactivado"}`);
-      loadUsers();
     } catch (error) {
       showMessage("Error al cambiar estado");
     }
@@ -186,12 +202,14 @@ function Admin() {
     try {
       const until = new Date();
       until.setMinutes(until.getMinutes() + 4);
-
-      await setDoc(doc(db, "settings", "app"), {
-        version: Date.now().toString(),
-        maintenanceUntil: Timestamp.fromDate(until)
-      }, { merge: true });
-
+      await setDoc(
+        doc(db, "settings", "app"),
+        {
+          version: Date.now().toString(),
+          maintenanceUntil: Timestamp.fromDate(until)
+        },
+        { merge: true }
+      );
       showMessage("Actualización activada. Bloqueo de 4 minutos iniciado.");
     } catch (err) {
       console.error(err);
@@ -214,12 +232,19 @@ function Admin() {
     return timestamp.toDate().toLocaleString("es-CO");
   };
 
+  const onlineUsers = users.filter(isOnline);
+  const watchingUsers = onlineUsers.filter((u) => u.currentlyWatching);
+
   if (loading) {
-    return <p style={{ textAlign: "center", marginTop: "50px", color: "#fff" }}>Cargando...</p>;
+    return (
+      <p style={{ textAlign: "center", marginTop: "50px", color: "#fff" }}>
+        Cargando...
+      </p>
+    );
   }
 
   return (
-    <div style={{ maxWidth: "1100px", margin: "30px auto", padding: "20px", color: "#eee" }}>
+    <div style={{ maxWidth: "1200px", margin: "30px auto", padding: "20px", color: "#eee" }}>
       <h1 style={{ marginTop: 0 }}>Panel de Administración</h1>
 
       <div style={{ marginBottom: "20px", display: "flex", gap: "10px", flexWrap: "wrap" }}>
@@ -247,13 +272,15 @@ function Admin() {
       </div>
 
       {message && (
-        <p style={{
-          padding: "12px",
-          backgroundColor: "#1b5e20",
-          color: "#fff",
-          borderRadius: "6px",
-          marginBottom: "16px"
-        }}>
+        <p
+          style={{
+            padding: "12px",
+            backgroundColor: "#1b5e20",
+            color: "#fff",
+            borderRadius: "6px",
+            marginBottom: "16px"
+          }}
+        >
           {message}
         </p>
       )}
@@ -261,13 +288,49 @@ function Admin() {
       {/* ========== USUARIOS ========== */}
       {tab === "users" && (
         <div>
-          <h2 style={{ marginBottom: "16px" }}>Usuarios ({users.length})</h2>
+          <h2 style={{ marginBottom: "12px" }}>Usuarios ({users.length})</h2>
+
+          {/* Resumen en línea / viendo */}
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: "16px",
+              marginBottom: "20px",
+              padding: "14px 18px",
+              background: "#1a1a1a",
+              borderRadius: "10px",
+              border: "1px solid #333"
+            }}
+          >
+            <div>
+              <span style={{ color: "#888", fontSize: "13px" }}>En línea</span>
+              <div style={{ fontSize: "22px", fontWeight: 700, color: "#4CAF50" }}>
+                ● {onlineUsers.length}
+              </div>
+            </div>
+            <div>
+              <span style={{ color: "#888", fontSize: "13px" }}>Viendo algo</span>
+              <div style={{ fontSize: "22px", fontWeight: 700, color: "#ff9800" }}>
+                ▶ {watchingUsers.length}
+              </div>
+            </div>
+            <div>
+              <span style={{ color: "#888", fontSize: "13px" }}>Desconectados</span>
+              <div style={{ fontSize: "22px", fontWeight: 700, color: "#888" }}>
+                ○ {users.length - onlineUsers.length}
+              </div>
+            </div>
+          </div>
+
           <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "900px" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "1000px" }}>
               <thead>
                 <tr style={{ backgroundColor: "#333" }}>
                   <th style={{ padding: "12px", textAlign: "left" }}>Nombre</th>
                   <th style={{ padding: "12px", textAlign: "left" }}>Correo</th>
+                  <th style={{ padding: "12px", textAlign: "left" }}>Conexión</th>
+                  <th style={{ padding: "12px", textAlign: "left" }}>Viendo ahora</th>
                   <th style={{ padding: "12px", textAlign: "left" }}>Estado</th>
                   <th style={{ padding: "12px", textAlign: "left" }}>Plan / Vence</th>
                   <th style={{ padding: "12px", textAlign: "left" }}>Acciones</th>
@@ -277,36 +340,70 @@ function Admin() {
                 {users.map((user) => {
                   const timeLeft = getDaysLeft(user);
                   const isExpired = timeLeft !== null && timeLeft < 0;
+                  const online = isOnline(user);
+
                   return (
-                    <tr key={user.id} style={{ borderBottom: "1px solid #444" }}>
+                    <tr
+                      key={user.id}
+                      style={{
+                        borderBottom: "1px solid #444",
+                        background: online ? "rgba(76, 175, 80, 0.08)" : "transparent"
+                      }}
+                    >
                       <td style={{ padding: "12px" }}>{user.displayName || "-"}</td>
                       <td style={{ padding: "12px" }}>{user.email}</td>
                       <td style={{ padding: "12px" }}>
-                        <span style={{
-                          padding: "4px 8px",
-                          borderRadius: "4px",
-                          backgroundColor:
-                            user.status === "active" ? (isExpired ? "#e65100" : "#28a745") :
-                            user.status === "pending" ? "#ffc107" : "#dc3545",
-                          color: user.status === "pending" ? "#000" : "#fff",
-                          fontSize: "13px",
-                          fontWeight: 600
-                        }}>
-                          {user.status === "active" && isExpired ? "VENCIDO" : user.status}
+                        {online ? (
+                          <span style={{ color: "#4CAF50", fontWeight: 600 }}>● En línea</span>
+                        ) : (
+                          <span style={{ color: "#888" }}>○ Desconectado</span>
+                        )}
+                      </td>
+                      <td style={{ padding: "12px", fontSize: "13px", color: "#ffb74d", maxWidth: "220px" }}>
+                        {online && user.currentlyWatching
+                          ? user.currentlyWatching
+                          : "—"}
+                      </td>
+                      <td style={{ padding: "12px" }}>
+                        <span
+                          style={{
+                            padding: "4px 8px",
+                            borderRadius: "4px",
+                            backgroundColor:
+                              user.status === "active"
+                                ? isExpired
+                                  ? "#e65100"
+                                  : "#28a745"
+                                : user.status === "pending"
+                                ? "#ffc107"
+                                : "#dc3545",
+                            color: user.status === "pending" ? "#000" : "#fff",
+                            fontSize: "13px",
+                            fontWeight: 600
+                          }}
+                        >
+                          {user.status === "active" && isExpired
+                            ? "VENCIDO"
+                            : user.status}
                         </span>
                       </td>
                       <td style={{ padding: "12px", fontSize: "13px" }}>
                         {user.subscriptionPlan ? (
                           <>
-                            <div>{PLANS[user.subscriptionPlan]?.label || user.subscriptionPlan}</div>
+                            <div>
+                              {PLANS[user.subscriptionPlan]?.label ||
+                                user.subscriptionPlan}
+                            </div>
                             <div style={{ color: isExpired ? "#f44336" : "#aaa" }}>
                               {formatDate(user.subscriptionExpiresAt)}
                               {timeLeft !== null && timeLeft >= 0 && (
                                 <span>
                                   {" "}
-                                  ({user.subscriptionPlan === "trial30min"
+                                  (
+                                  {user.subscriptionPlan === "trial30min"
                                     ? `${timeLeft} min`
-                                    : `${timeLeft} días`})
+                                    : `${timeLeft} días`}
+                                  )
                                 </span>
                               )}
                               {isExpired && <span> (vencido)</span>}
@@ -337,9 +434,13 @@ function Admin() {
                                 fontSize: "13px"
                               }}
                             >
-                              <option value="" disabled>Activar + Plan...</option>
+                              <option value="" disabled>
+                                Activar + Plan...
+                              </option>
                               {Object.entries(PLANS).map(([key, p]) => (
-                                <option key={key} value={key}>{p.label}</option>
+                                <option key={key} value={key}>
+                                  {p.label}
+                                </option>
                               ))}
                             </select>
                           )}
@@ -363,9 +464,13 @@ function Admin() {
                                   fontSize: "13px"
                                 }}
                               >
-                                <option value="" disabled>Extender...</option>
+                                <option value="" disabled>
+                                  Extender...
+                                </option>
                                 {Object.entries(PLANS).map(([key, p]) => (
-                                  <option key={key} value={key}>{p.label}</option>
+                                  <option key={key} value={key}>
+                                    {p.label}
+                                  </option>
                                 ))}
                               </select>
                               <button
@@ -429,13 +534,15 @@ function Admin() {
                     border: "1px solid #333"
                   }}
                 >
-                  <div style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    flexWrap: "wrap",
-                    gap: "10px",
-                    marginBottom: "10px"
-                  }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      flexWrap: "wrap",
+                      gap: "10px",
+                      marginBottom: "10px"
+                    }}
+                  >
                     <div>
                       <strong style={{ fontSize: "17px" }}>{req.title}</strong>
                       <div style={{ color: "#888", fontSize: "13px", marginTop: "4px" }}>
@@ -444,16 +551,21 @@ function Admin() {
                         {" • "}Pedido por: {req.displayName || req.email}
                       </div>
                     </div>
-                    <span style={{
-                      padding: "4px 12px",
-                      borderRadius: "20px",
-                      fontSize: "12px",
-                      fontWeight: 700,
-                      background:
-                        req.status === "available" ? "#28a745" :
-                        req.status === "unavailable" ? "#dc3545" : "#ffc107",
-                      color: req.status === "pending" ? "#000" : "#fff"
-                    }}>
+                    <span
+                      style={{
+                        padding: "4px 12px",
+                        borderRadius: "20px",
+                        fontSize: "12px",
+                        fontWeight: 700,
+                        background:
+                          req.status === "available"
+                            ? "#28a745"
+                            : req.status === "unavailable"
+                            ? "#dc3545"
+                            : "#ffc107",
+                        color: req.status === "pending" ? "#000" : "#fff"
+                      }}
+                    >
                       {req.status === "available"
                         ? "Disponible"
                         : req.status === "unavailable"
@@ -461,12 +573,22 @@ function Admin() {
                         : "En espera"}
                     </span>
                   </div>
-
                   {req.status === "pending" && (
-                    <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginTop: "12px" }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: "10px",
+                        flexWrap: "wrap",
+                        marginTop: "12px"
+                      }}
+                    >
                       <button
                         onClick={() =>
-                          respondRequest(req.id, "available", "Ya está disponible en el catálogo")
+                          respondRequest(
+                            req.id,
+                            "available",
+                            "Ya está disponible en el catálogo"
+                          )
                         }
                         style={{
                           padding: "8px 16px",
@@ -486,7 +608,11 @@ function Admin() {
                             "Mensaje para el usuario (opcional):",
                             "Por ahora no fue posible agregarla"
                           );
-                          respondRequest(req.id, "unavailable", msg || "No se pudo agregar");
+                          respondRequest(
+                            req.id,
+                            "unavailable",
+                            msg || "No se pudo agregar"
+                          );
                         }}
                         style={{
                           padding: "8px 16px",
@@ -502,7 +628,6 @@ function Admin() {
                       </button>
                     </div>
                   )}
-
                   {req.adminMessage && (
                     <p style={{ margin: "12px 0 0", color: "#aaa", fontSize: "14px" }}>
                       Mensaje: {req.adminMessage}
@@ -520,14 +645,17 @@ function Admin() {
         <div>
           <h2 style={{ marginBottom: "16px" }}>Configuración</h2>
 
-          {/* Teléfono */}
-          <div style={{
-            background: "#1e1e1e",
-            padding: "24px",
-            borderRadius: "10px",
-            maxWidth: "500px"
-          }}>
-            <h3 style={{ marginTop: 0, color: "#ffcc00" }}>Número de contacto (WhatsApp)</h3>
+          <div
+            style={{
+              background: "#1e1e1e",
+              padding: "24px",
+              borderRadius: "10px",
+              maxWidth: "500px"
+            }}
+          >
+            <h3 style={{ marginTop: 0, color: "#ffcc00" }}>
+              Número de contacto (WhatsApp)
+            </h3>
             <p style={{ color: "#aaa", fontSize: "14px", marginBottom: "12px" }}>
               Este número se muestra a los usuarios cuando se registran.
             </p>
@@ -565,18 +693,21 @@ function Admin() {
             </p>
           </div>
 
-          {/* Actualización forzada */}
-          <div style={{
-            background: "#1e1e1e",
-            padding: "24px",
-            borderRadius: "10px",
-            maxWidth: "500px",
-            marginTop: "24px"
-          }}>
-            <h3 style={{ marginTop: 0, color: "#ffcc00" }}>Actualización de la página</h3>
+          <div
+            style={{
+              background: "#1e1e1e",
+              padding: "24px",
+              borderRadius: "10px",
+              maxWidth: "500px",
+              marginTop: "24px"
+            }}
+          >
+            <h3 style={{ marginTop: 0, color: "#ffcc00" }}>
+              Actualización de la página
+            </h3>
             <p style={{ color: "#aaa", fontSize: "14px", marginBottom: "12px" }}>
-              Al activarlo, todos los usuarios se desconectan y la página se bloquea durante 4 minutos.
-              Después deben iniciar sesión otra vez (con la versión nueva).
+              Al activarlo, todos los usuarios se desconectan y la página se bloquea
+              durante 4 minutos. Después deben iniciar sesión otra vez.
             </p>
             <button
               onClick={activateUpdate}

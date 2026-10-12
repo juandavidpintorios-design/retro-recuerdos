@@ -61,7 +61,6 @@ function Catalog({ user }) {
     if (!user?.uid) return;
     const deviceId = getDeviceId();
     const deviceRef = doc(db, "devices", `${user.uid}_${deviceId}`);
-
     try {
       const existing = await getDoc(deviceRef);
       if (existing.exists()) {
@@ -69,16 +68,13 @@ function Catalog({ user }) {
         setDeviceAllowed(true);
         return;
       }
-
       const snap = await getDocs(
         query(collection(db, "devices"), where("userId", "==", user.uid))
       );
-
       if (snap.size >= 4) {
         setDeviceAllowed(false);
         return;
       }
-
       await setDoc(deviceRef, {
         userId: user.uid,
         deviceId,
@@ -87,7 +83,6 @@ function Catalog({ user }) {
         createdAt: serverTimestamp(),
         lastSeen: serverTimestamp()
       });
-
       setDeviceAllowed(true);
     } catch (err) {
       console.error(err);
@@ -97,7 +92,6 @@ function Catalog({ user }) {
 
   useEffect(() => {
     if (!user?.uid) return;
-
     checkDeviceLimit();
 
     const unsubContent = onSnapshot(collection(db, "content"), (snap) => {
@@ -106,7 +100,6 @@ function Catalog({ user }) {
       list.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
       setContents(list);
       setLoading(false);
-
       setSelected((prev) => {
         if (!prev) return null;
         const updated = list.find((c) => c.id === prev.id);
@@ -121,7 +114,6 @@ function Catalog({ user }) {
         if (!allRatings[data.contentId]) allRatings[data.contentId] = [];
         allRatings[data.contentId].push(data);
       });
-
       setContents((currentList) => {
         const ratingsData = {};
         currentList.forEach((item) => {
@@ -172,6 +164,46 @@ function Catalog({ user }) {
     };
   }, [user?.uid]);
 
+  // Presencia: en línea + qué está viendo (para el admin)
+  useEffect(() => {
+    if (!user?.uid) return;
+
+    const updatePresence = async (watchingTitle = null, watchingId = null) => {
+      try {
+        await updateDoc(doc(db, "users", user.uid), {
+          lastActiveAt: serverTimestamp(),
+          currentlyWatching: watchingTitle,
+          currentlyWatchingId: watchingId
+        });
+      } catch (e) {
+        console.error("presence", e);
+      }
+    };
+
+    const getWatchingLabel = () => {
+      if (!selected) return null;
+      if (selected.type === "series" && currentEpisode) {
+        return `${selected.title} — T${currentEpisode.season || 1}E${currentEpisode.number}`;
+      }
+      return selected.title;
+    };
+
+    updatePresence(getWatchingLabel(), selected?.id || null);
+
+    const interval = setInterval(() => {
+      updatePresence(getWatchingLabel(), selected?.id || null);
+    }, 45000);
+
+    return () => {
+      clearInterval(interval);
+      updateDoc(doc(db, "users", user.uid), {
+        lastActiveAt: serverTimestamp(),
+        currentlyWatching: null,
+        currentlyWatchingId: null
+      }).catch(() => {});
+    };
+  }, [user?.uid, selected?.id, currentEpisode?.number, currentEpisode?.season]);
+
   const getYoutubeId = (link) => {
     if (!link) return null;
     const m = link.match(
@@ -182,34 +214,23 @@ function Catalog({ user }) {
 
   const getEmbedUrl = (link) => {
     if (!link) return null;
-
-    // Player oficial de partner (geo.dailymotion.com)
     if (link.includes("geo.dailymotion.com/player/")) {
       return link;
     }
-
-    // YouTube
     const yt = getYoutubeId(link);
     if (yt) return `https://www.youtube.com/embed/${yt}?rel=0`;
-
-    // Dailymotion
     const dm =
       link.match(/dailymotion\.com\/(?:embed\/)?video\/([a-zA-Z0-9]+)/i) ||
       link.match(/dai\.ly\/([a-zA-Z0-9]+)/i);
     if (dm) return `https://www.dailymotion.com/embed/video/${dm[1]}`;
-
-    // Google Drive
     const drive = link.match(/\/d\/([a-zA-Z0-9_-]+)/);
     if (drive) return `https://drive.google.com/file/d/${drive[1]}/preview`;
-
-    // Archive.org
     if (link.includes("archive.org")) {
       if (link.includes("/details/")) return link.replace("/details/", "/embed/");
       if (link.includes("/embed/")) return link;
       const id = link.split("/").filter(Boolean).pop();
       return `https://archive.org/embed/${id}`;
     }
-
     return null;
   };
 
@@ -393,12 +414,29 @@ function Catalog({ user }) {
       setCurrentEpisode(null);
     }
     await addToHistory(item.id);
+
+    try {
+      await updateDoc(doc(db, "users", user.uid), {
+        lastActiveAt: serverTimestamp(),
+        currentlyWatching: item.title,
+        currentlyWatchingId: item.id
+      });
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   const handleBack = () => {
     setSelected(null);
     setCurrentEpisode(null);
     setComments([]);
+    if (user?.uid) {
+      updateDoc(doc(db, "users", user.uid), {
+        lastActiveAt: serverTimestamp(),
+        currentlyWatching: null,
+        currentlyWatchingId: null
+      }).catch(() => {});
+    }
   };
 
   const years = [...new Set(contents.map((c) => c.year).filter(Boolean))].sort(
@@ -473,7 +511,6 @@ function Catalog({ user }) {
         >
           {favorites[item.id] ? "❤️" : "🤍"}
         </button>
-
         {poster ? (
           <img
             src={poster}
@@ -496,7 +533,6 @@ function Catalog({ user }) {
             Sin portada
           </div>
         )}
-
         <div style={{ padding: "12px" }}>
           <h3 style={{ margin: "0 0 6px 0", fontSize: "15px", lineHeight: 1.3, fontWeight: 600, color: "#fff" }}>
             {item.title}
@@ -819,7 +855,6 @@ function Catalog({ user }) {
             <h2 style={{ margin: "0 0 16px 0", fontSize: "20px" }}>
               Episodios ({selected.episodes.length})
             </h2>
-
             {seasons.map((seasonNum) => (
               <div key={seasonNum} style={{ marginBottom: "28px" }}>
                 <h3 style={{
@@ -835,14 +870,12 @@ function Catalog({ user }) {
                     ({bySeason[seasonNum].length} episodios)
                   </span>
                 </h3>
-
                 <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "12px" }}>
                   {bySeason[seasonNum].map((ep) => {
                     const num = ep.number;
                     const active =
                       currentEpisode?.number === num &&
                       Number(currentEpisode?.season || 1) === seasonNum;
-
                     return (
                       <div
                         key={`${seasonNum}-${num}-${ep._index}`}
@@ -987,7 +1020,6 @@ function Catalog({ user }) {
             outline: "none"
           }}
         />
-
         <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", alignItems: "center" }}>
           {["all", "movie", "series"].map((t) => (
             <button
@@ -1007,7 +1039,6 @@ function Catalog({ user }) {
               {t === "all" ? "Todos" : t === "movie" ? "Películas" : "Series"}
             </button>
           ))}
-
           <select
             value={filterYear}
             onChange={(e) => setFilterYear(e.target.value)}
@@ -1026,7 +1057,6 @@ function Catalog({ user }) {
               <option key={y} value={y}>{y}</option>
             ))}
           </select>
-
           <button
             onClick={() => setShowFavoritesOnly(!showFavoritesOnly)}
             style={{
