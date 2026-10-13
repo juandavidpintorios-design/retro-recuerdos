@@ -15,12 +15,14 @@ function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showRegister, setShowRegister] = useState(false);
-  const [adminView, setAdminView] = useState(null);
+  const [adminView, setAdminView] = useState(null); // null | "users" | "content"
   const [page, setPage] = useState("catalog");
   const [maintenance, setMaintenance] = useState(null);
   const [checkingUpdate, setCheckingUpdate] = useState(true);
-
   const [theme, setTheme] = useState(() => localStorage.getItem("retro_theme") || "villano");
+
+  const isAdmin = user?.role === "admin";
+  const isEditor = user?.role === "editor" || isAdmin;
 
   const toggleTheme = () => {
     const next = theme === "villano" ? "heroe" : "villano";
@@ -29,7 +31,6 @@ function App() {
   };
 
   const isHeroe = theme === "heroe";
-
   const colors = {
     bg: isHeroe ? "#f5f0e8" : "#111",
     header: isHeroe ? "#e8e0d4" : "#1a1a1a",
@@ -132,7 +133,7 @@ function App() {
     return () => unsubscribe();
   }, []);
 
-  // Suscripción en tiempo real (sin recargar)
+  // Suscripción + rol en tiempo real
   useEffect(() => {
     if (!user?.uid) return;
 
@@ -142,24 +143,31 @@ function App() {
         return;
       }
       const data = snap.data();
-
       if (data.status !== "active") {
         signOut(auth);
         setUser(null);
         return;
       }
-
       setUser((prev) => {
         if (!prev) return prev;
         return {
           ...prev,
           displayName: data.displayName || prev.displayName,
-          role: data.role || prev.role,
+          role: data.role || "user",
           status: data.status,
           subscriptionPlan: data.subscriptionPlan || null,
           subscriptionExpiresAt: data.subscriptionExpiresAt || null
         };
       });
+
+      // Si deja de ser admin/editor y estaba en panel, salir
+      const role = data.role || "user";
+      if (role !== "admin" && role !== "editor") {
+        setAdminView(null);
+      } else if (role === "editor") {
+        // Editor no puede ver usuarios
+        setAdminView((v) => (v === "users" ? "content" : v));
+      }
     });
 
     return () => unsub();
@@ -184,17 +192,19 @@ function App() {
   if (maintenance && maintenance > new Date()) {
     const mins = Math.max(1, Math.ceil((maintenance - new Date()) / 60000));
     return (
-      <div style={{
-        minHeight: "100vh",
-        background: "#0d0221",
-        color: "#fff",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: "20px",
-        textAlign: "center"
-      }}>
+      <div
+        style={{
+          minHeight: "100vh",
+          background: "#0d0221",
+          color: "#fff",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "20px",
+          textAlign: "center"
+        }}
+      >
         <h1 style={{ color: "#ff6b00", marginBottom: "12px" }}>
           Actualizando Retro Recuerdos
         </h1>
@@ -211,23 +221,29 @@ function App() {
 
   if (loading || checkingUpdate) {
     return (
-      <div style={{
-        textAlign: "center",
-        marginTop: "100px",
-        color: "white",
-        backgroundColor: "#111",
-        minHeight: "100vh"
-      }}>
+      <div
+        style={{
+          textAlign: "center",
+          marginTop: "100px",
+          color: "white",
+          backgroundColor: "#111",
+          minHeight: "100vh"
+        }}
+      >
         <h2>Cargando...</h2>
       </div>
     );
   }
 
-  if (user) {
-    if (user.role === "admin" && adminView) {
-      return (
-        <div style={{ minHeight: "100vh", backgroundColor: "#111", color: "white" }}>
-          <div style={{
+  // ========== PANEL ADMIN / EDITOR ==========
+  if (user && isEditor && adminView) {
+    // Editor solo puede "content"
+    const view = isAdmin ? adminView : "content";
+
+    return (
+      <div style={{ minHeight: "100vh", backgroundColor: "#111", color: "white" }}>
+        <div
+          style={{
             padding: "12px 20px",
             backgroundColor: "#1a1a1a",
             display: "flex",
@@ -235,14 +251,18 @@ function App() {
             alignItems: "center",
             flexWrap: "wrap",
             gap: "10px"
-          }}>
-            <h2 style={{ margin: 0 }}>Retro Recuerdos - Admin</h2>
-            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+          }}
+        >
+          <h2 style={{ margin: 0 }}>
+            Retro Recuerdos - {isAdmin ? "Admin" : "Editor"}
+          </h2>
+          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+            {isAdmin && (
               <button
                 onClick={() => setAdminView("users")}
                 style={{
                   padding: "8px 16px",
-                  backgroundColor: adminView === "users" ? "#2196F3" : "#444",
+                  backgroundColor: view === "users" ? "#2196F3" : "#444",
                   color: "white",
                   border: "none",
                   borderRadius: "4px",
@@ -251,70 +271,81 @@ function App() {
               >
                 Usuarios
               </button>
-              <button
-                onClick={() => setAdminView("content")}
-                style={{
-                  padding: "8px 16px",
-                  backgroundColor: adminView === "content" ? "#4CAF50" : "#444",
-                  color: "white",
-                  border: "none",
-                  borderRadius: "4px",
-                  cursor: "pointer"
-                }}
-              >
-                Películas / Series
-              </button>
-              <button onClick={() => setAdminView(null)} style={{ padding: "8px 16px", cursor: "pointer" }}>
-                Volver al catálogo
-              </button>
-              <button
-                onClick={handleLogout}
-                style={{
-                  padding: "8px 16px",
-                  backgroundColor: "#f44336",
-                  color: "white",
-                  border: "none",
-                  borderRadius: "4px",
-                  cursor: "pointer"
-                }}
-              >
-                Cerrar sesión
-              </button>
-            </div>
+            )}
+            <button
+              onClick={() => setAdminView("content")}
+              style={{
+                padding: "8px 16px",
+                backgroundColor: view === "content" ? "#4CAF50" : "#444",
+                color: "white",
+                border: "none",
+                borderRadius: "4px",
+                cursor: "pointer"
+              }}
+            >
+              Películas / Series
+            </button>
+            <button
+              onClick={() => setAdminView(null)}
+              style={{ padding: "8px 16px", cursor: "pointer" }}
+            >
+              Volver al catálogo
+            </button>
+            <button
+              onClick={handleLogout}
+              style={{
+                padding: "8px 16px",
+                backgroundColor: "#f44336",
+                color: "white",
+                border: "none",
+                borderRadius: "4px",
+                cursor: "pointer"
+              }}
+            >
+              Cerrar sesión
+            </button>
           </div>
-          {adminView === "users" && <Admin />}
-          {adminView === "content" && <ContentAdmin />}
         </div>
-      );
-    }
 
+        {isAdmin && view === "users" && <Admin />}
+        {view === "content" && <ContentAdmin user={user} />}
+      </div>
+    );
+  }
+
+  // ========== USUARIO LOGUEADO ==========
+  if (user) {
     return (
       <div style={{ minHeight: "100vh", backgroundColor: colors.bg, color: colors.text }}>
         {showSubWarning && (
-          <div style={{
-            background: daysLeft <= 2 ? "#c62828" : "#e65100",
-            color: "#fff",
-            padding: "10px 16px",
-            textAlign: "center",
-            fontSize: "14px",
-            fontWeight: 600
-          }}>
+          <div
+            style={{
+              background: daysLeft <= 2 ? "#c62828" : "#e65100",
+              color: "#fff",
+              padding: "10px 16px",
+              textAlign: "center",
+              fontSize: "14px",
+              fontWeight: 600
+            }}
+          >
             {daysLeft === 0
               ? "⚠️ Tu suscripción vence hoy. Renueva para no perder el acceso."
               : `⚠️ Tu suscripción vence en ${daysLeft} día${daysLeft === 1 ? "" : "s"}. Contacta al administrador para renovar.`}
           </div>
         )}
 
-        <div style={{
-          padding: "12px 20px",
-          backgroundColor: colors.header,
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          flexWrap: "wrap",
-          gap: "10px",
-          borderBottom: `1px solid ${colors.border}`
-        }}>
+        <div
+          style={{
+            padding: "12px 20px",
+            backgroundColor: colors.header,
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            flexWrap: "wrap",
+            gap: "10px",
+            borderBottom: `1px solid ${colors.border}`
+          }}
+        >
           <h2
             style={{ margin: 0, cursor: "pointer", color: colors.accent }}
             onClick={() => setPage("catalog")}
@@ -362,41 +393,46 @@ function App() {
               {isHeroe ? "😈 Villano" : "🦸 Héroe"}
             </button>
 
-            {user.role === "admin" && (
-              <>
-                <button
-                  onClick={() => setAdminView("users")}
-                  style={{
-                    padding: "7px 14px",
-                    backgroundColor: "#2196F3",
-                    color: "white",
-                    border: "none",
-                    borderRadius: "4px",
-                    cursor: "pointer",
-                    fontSize: "13px"
-                  }}
-                >
-                  Usuarios
-                </button>
-                <button
-                  onClick={() => setAdminView("content")}
-                  style={{
-                    padding: "7px 14px",
-                    backgroundColor: "#4CAF50",
-                    color: "white",
-                    border: "none",
-                    borderRadius: "4px",
-                    cursor: "pointer",
-                    fontSize: "13px"
-                  }}
-                >
-                  Contenido
-                </button>
-              </>
+            {/* Solo ADMIN: Usuarios */}
+            {isAdmin && (
+              <button
+                onClick={() => setAdminView("users")}
+                style={{
+                  padding: "7px 14px",
+                  backgroundColor: "#2196F3",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "4px",
+                  cursor: "pointer",
+                  fontSize: "13px"
+                }}
+              >
+                Usuarios
+              </button>
+            )}
+
+            {/* ADMIN o EDITOR: Contenido */}
+            {isEditor && (
+              <button
+                onClick={() => setAdminView("content")}
+                style={{
+                  padding: "7px 14px",
+                  backgroundColor: "#4CAF50",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "4px",
+                  cursor: "pointer",
+                  fontSize: "13px"
+                }}
+              >
+                Contenido
+              </button>
             )}
 
             <span style={{ fontSize: "13px", color: colors.muted }}>
               Hola, {user.displayName}
+              {user.role === "editor" && " (Editor)"}
+              {user.role === "admin" && " (Admin)"}
             </span>
 
             <button
@@ -424,6 +460,7 @@ function App() {
     );
   }
 
+  // ========== NO LOGUEADO ==========
   return (
     <div style={{ minHeight: "100vh", backgroundColor: "#111", color: "white" }}>
       {showRegister ? (
