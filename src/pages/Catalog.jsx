@@ -164,10 +164,8 @@ function Catalog({ user }) {
     };
   }, [user?.uid]);
 
-  // Presencia: en línea + qué está viendo (para el admin)
   useEffect(() => {
     if (!user?.uid) return;
-
     const updatePresence = async (watchingTitle = null, watchingId = null) => {
       try {
         await updateDoc(doc(db, "users", user.uid), {
@@ -179,7 +177,6 @@ function Catalog({ user }) {
         console.error("presence", e);
       }
     };
-
     const getWatchingLabel = () => {
       if (!selected) return null;
       if (selected.type === "series" && currentEpisode) {
@@ -187,13 +184,10 @@ function Catalog({ user }) {
       }
       return selected.title;
     };
-
     updatePresence(getWatchingLabel(), selected?.id || null);
-
     const interval = setInterval(() => {
       updatePresence(getWatchingLabel(), selected?.id || null);
     }, 45000);
-
     return () => {
       clearInterval(interval);
       updateDoc(doc(db, "users", user.uid), {
@@ -214,9 +208,7 @@ function Catalog({ user }) {
 
   const getEmbedUrl = (link) => {
     if (!link) return null;
-    if (link.includes("geo.dailymotion.com/player/")) {
-      return link;
-    }
+    if (link.includes("geo.dailymotion.com/player/")) return link;
     const yt = getYoutubeId(link);
     if (yt) return `https://www.youtube.com/embed/${yt}?rel=0`;
     const dm =
@@ -230,6 +222,10 @@ function Catalog({ user }) {
       if (link.includes("/embed/")) return link;
       const id = link.split("/").filter(Boolean).pop();
       return `https://archive.org/embed/${id}`;
+    }
+    if (link.includes("vimeo.com")) {
+      const vm = link.match(/vimeo\.com\/(?:video\/)?(\d+)/);
+      if (vm) return `https://player.vimeo.com/video/${vm[1]}`;
     }
     return null;
   };
@@ -246,6 +242,10 @@ function Catalog({ user }) {
     if (item.driveLink) {
       const yt = getYoutubeId(item.driveLink);
       if (yt) return `https://img.youtube.com/vi/${yt}/maxresdefault.jpg`;
+    }
+    if (item.trailer) {
+      const yt = getYoutubeId(item.trailer);
+      if (yt) return `https://img.youtube.com/vi/${yt}/hqdefault.jpg`;
     }
     if (item.episodes?.[0]?.link) {
       const yt = getYoutubeId(item.episodes[0].link);
@@ -400,6 +400,80 @@ function Catalog({ user }) {
     );
   };
 
+  /** Reproductor pequeño de tráiler (series y películas) */
+  const TrailerPlayer = ({ trailerUrl }) => {
+    if (!trailerUrl || !String(trailerUrl).trim()) return null;
+    const embed = getEmbedUrl(trailerUrl);
+    return (
+      <div style={{ marginBottom: "24px" }}>
+        <h3 style={{ margin: "0 0 12px 0", color: "#ffaa55", fontSize: "16px" }}>
+          ▶ Tráiler
+        </h3>
+        {embed ? (
+          <div
+            style={{
+              position: "relative",
+              paddingBottom: "56.25%",
+              height: 0,
+              overflow: "hidden",
+              borderRadius: "12px",
+              background: "#000",
+              maxWidth: "640px",
+              border: "1px solid #333"
+            }}
+          >
+            <iframe
+              src={embed}
+              title="Tráiler"
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                width: "100%",
+                height: "100%",
+                border: "none"
+              }}
+              allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
+              allowFullScreen
+              referrerPolicy="strict-origin-when-cross-origin"
+            />
+          </div>
+        ) : (
+          <div
+            style={{
+              padding: "24px",
+              background: "#1a1a1a",
+              borderRadius: "12px",
+              border: "1px solid #333",
+              maxWidth: "640px",
+              textAlign: "center"
+            }}
+          >
+            <p style={{ color: "#aaa", margin: "0 0 12px 0" }}>
+              No se pudo embeber el tráiler en la página
+            </p>
+            <a
+              href={trailerUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: "inline-block",
+                padding: "10px 20px",
+                background: "#ff6b00",
+                color: "#fff",
+                borderRadius: "8px",
+                textDecoration: "none",
+                fontWeight: 600
+              }}
+            >
+              Ver tráiler ↗
+            </a>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const handleSelect = async (item) => {
     setSelected(item);
     setNewComment("");
@@ -414,7 +488,6 @@ function Catalog({ user }) {
       setCurrentEpisode(null);
     }
     await addToHistory(item.id);
-
     try {
       await updateDoc(doc(db, "users", user.uid), {
         lastActiveAt: serverTimestamp(),
@@ -467,7 +540,11 @@ function Catalog({ user }) {
     .filter(Boolean)
     .slice(0, 6);
 
-  const ContentCard = ({ item }) => {
+  const withTrailer = contents.filter(
+    (c) => c.trailer && String(c.trailer).trim()
+  );
+
+  const ContentCard = ({ item, compact }) => {
     const poster = getPoster(item);
     return (
       <div
@@ -479,7 +556,9 @@ function Catalog({ user }) {
           backgroundColor: "#1a1a1a",
           position: "relative",
           transition: "transform 0.2s, box-shadow 0.2s",
-          border: "1px solid #2a2a2a"
+          border: "1px solid #2a2a2a",
+          flex: compact ? "0 0 150px" : undefined,
+          width: compact ? "150px" : undefined
         }}
         onMouseEnter={(e) => {
           e.currentTarget.style.transform = "scale(1.04)";
@@ -515,13 +594,18 @@ function Catalog({ user }) {
           <img
             src={poster}
             alt={item.title}
-            style={{ width: "100%", height: "240px", objectFit: "cover", display: "block" }}
+            style={{
+              width: "100%",
+              height: compact ? "200px" : "240px",
+              objectFit: "cover",
+              display: "block"
+            }}
           />
         ) : (
           <div
             style={{
               width: "100%",
-              height: "240px",
+              height: compact ? "200px" : "240px",
               background: "linear-gradient(135deg, #2a2a2a, #1a1a1a)",
               display: "flex",
               alignItems: "center",
@@ -533,29 +617,64 @@ function Catalog({ user }) {
             Sin portada
           </div>
         )}
-        <div style={{ padding: "12px" }}>
-          <h3 style={{ margin: "0 0 6px 0", fontSize: "15px", lineHeight: 1.3, fontWeight: 600, color: "#fff" }}>
+        {item.trailer && (
+          <div
+            style={{
+              position: "absolute",
+              bottom: compact ? "52px" : "88px",
+              left: "8px",
+              background: "rgba(0,0,0,0.8)",
+              color: "#ff6b00",
+              fontSize: "11px",
+              padding: "3px 8px",
+              borderRadius: "4px",
+              fontWeight: 700
+            }}
+          >
+            ▶ Trailer
+          </div>
+        )}
+        <div style={{ padding: compact ? "10px" : "12px" }}>
+          <h3
+            style={{
+              margin: "0 0 6px 0",
+              fontSize: compact ? "13px" : "15px",
+              lineHeight: 1.3,
+              fontWeight: 600,
+              color: "#fff",
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis"
+            }}
+          >
             {item.title}
           </h3>
-          <p style={{ margin: "0 0 6px 0", fontSize: "12px", color: "#aaa" }}>
-            {item.type === "movie" ? "Película" : `Serie • ${item.episodes?.length || 0} eps`}
-            {item.year && ` • ${item.year}`}
-            <StatusBadge item={item} />
-          </p>
-          {item.artists?.length > 0 && (
-            <p style={{ margin: "0 0 6px 0", fontSize: "11px", color: "#ffb74d" }}>
-              {Array.isArray(item.artists)
-                ? item.artists.slice(0, 2).join(", ")
-                : item.artists}
-              {Array.isArray(item.artists) && item.artists.length > 2 ? "…" : ""}
-            </p>
+          {!compact && (
+            <>
+              <p style={{ margin: "0 0 6px 0", fontSize: "12px", color: "#aaa" }}>
+                {item.type === "movie"
+                  ? "Película"
+                  : `Serie • ${item.episodes?.length || 0} eps`}
+                {item.year && ` • ${item.year}`}
+                <StatusBadge item={item} />
+              </p>
+              {item.artists?.length > 0 && (
+                <p style={{ margin: "0 0 6px 0", fontSize: "11px", color: "#ffb74d" }}>
+                  {Array.isArray(item.artists)
+                    ? item.artists.slice(0, 2).join(", ")
+                    : item.artists}
+                  {Array.isArray(item.artists) && item.artists.length > 2 ? "…" : ""}
+                </p>
+              )}
+              <Stars contentId={item.id} size={14} />
+            </>
           )}
-          <Stars contentId={item.id} size={14} />
         </div>
       </div>
     );
   };
 
+  // ========== DETALLE ==========
   if (selected) {
     const isSeries = selected.type === "series";
     const videoLink = isSeries
@@ -582,7 +701,15 @@ function Catalog({ user }) {
       .sort((a, b) => a - b);
 
     return (
-      <div style={{ padding: "20px", maxWidth: "1100px", margin: "0 auto", color: "#fff", minHeight: "100vh" }}>
+      <div
+        style={{
+          padding: "20px",
+          maxWidth: "1100px",
+          margin: "0 auto",
+          color: "#fff",
+          minHeight: "100vh"
+        }}
+      >
         <button
           onClick={handleBack}
           style={{
@@ -599,14 +726,16 @@ function Catalog({ user }) {
           ← Volver al catálogo
         </button>
 
-        <div style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "flex-start",
-          gap: "16px",
-          flexWrap: "wrap",
-          marginBottom: "12px"
-        }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "flex-start",
+            gap: "16px",
+            flexWrap: "wrap",
+            marginBottom: "12px"
+          }}
+        >
           <h1 style={{ margin: 0, fontSize: "26px", fontWeight: 700 }}>
             {selected.title}
             <StatusBadge item={selected} />
@@ -650,71 +779,39 @@ function Catalog({ user }) {
         )}
 
         <div style={{ marginBottom: "20px" }}>
-          <p style={{ margin: "0 0 6px 0", fontSize: "14px", color: "#ccc" }}>Tu calificación:</p>
+          <p style={{ margin: "0 0 6px 0", fontSize: "14px", color: "#ccc" }}>
+            Tu calificación:
+          </p>
           <Stars contentId={selected.id} size={28} interactive />
         </div>
 
         {selected.description && (
-          <p style={{ marginBottom: "24px", color: "#ccc", lineHeight: 1.6, fontSize: "15px" }}>
+          <p
+            style={{
+              marginBottom: "24px",
+              color: "#ccc",
+              lineHeight: 1.6,
+              fontSize: "15px"
+            }}
+          >
             {selected.description}
           </p>
         )}
 
-        {selected.trailer && (
-          <div style={{ marginBottom: "24px" }}>
-            <h3 style={{ margin: "0 0 12px 0", color: "#ffaa55" }}>Tráiler</h3>
-            {(() => {
-              const yt = getYoutubeId(selected.trailer);
-              if (yt) {
-                return (
-                  <div style={{
-                    position: "relative",
-                    paddingBottom: "56.25%",
-                    height: 0,
-                    overflow: "hidden",
-                    borderRadius: "12px",
-                    background: "#000",
-                    maxWidth: "640px"
-                  }}>
-                    <iframe
-                      src={`https://www.youtube.com/embed/${yt}?rel=0`}
-                      style={{
-                        position: "absolute",
-                        top: 0,
-                        left: 0,
-                        width: "100%",
-                        height: "100%",
-                        border: "none"
-                      }}
-                      allow="encrypted-media; fullscreen"
-                      allowFullScreen
-                    />
-                  </div>
-                );
-              }
-              return (
-                <a
-                  href={selected.trailer}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{ color: "#ff6b00", fontWeight: 600 }}
-                >
-                  Ver tráiler ↗
-                </a>
-              );
-            })()}
-          </div>
-        )}
+        {/* TRAILER — películas y series */}
+        <TrailerPlayer trailerUrl={selected.trailer} />
 
         {!canPlay ? (
-          <div style={{
-            padding: "50px",
-            textAlign: "center",
-            background: "#1a1a1a",
-            borderRadius: "12px",
-            marginBottom: "28px",
-            border: "2px solid #e65100"
-          }}>
+          <div
+            style={{
+              padding: "50px",
+              textAlign: "center",
+              background: "#1a1a1a",
+              borderRadius: "12px",
+              marginBottom: "28px",
+              border: "2px solid #e65100"
+            }}
+          >
             <h3 style={{ color: "#ff9800", marginTop: 0 }}>
               {!isSubActive() ? "Suscripción vencida" : "Límite de dispositivos"}
             </h3>
@@ -726,14 +823,16 @@ function Catalog({ user }) {
           </div>
         ) : videoLink ? (
           isMegaLink(videoLink) ? (
-            <div style={{
-              padding: "50px",
-              background: "#111",
-              borderRadius: "12px",
-              textAlign: "center",
-              marginBottom: "28px",
-              border: "1px solid #333"
-            }}>
+            <div
+              style={{
+                padding: "50px",
+                background: "#111",
+                borderRadius: "12px",
+                textAlign: "center",
+                marginBottom: "28px",
+                border: "1px solid #333"
+              }}
+            >
               <a
                 href={videoLink}
                 target="_blank"
@@ -754,15 +853,17 @@ function Catalog({ user }) {
             </div>
           ) : embedUrl ? (
             <div style={{ marginBottom: "28px" }}>
-              <div style={{
-                position: "relative",
-                paddingBottom: "56.25%",
-                height: 0,
-                overflow: "hidden",
-                borderRadius: "12px",
-                background: "#000",
-                border: "1px solid #333"
-              }}>
+              <div
+                style={{
+                  position: "relative",
+                  paddingBottom: "56.25%",
+                  height: 0,
+                  overflow: "hidden",
+                  borderRadius: "12px",
+                  background: "#000",
+                  border: "1px solid #333"
+                }}
+              >
                 <iframe
                   src={embedUrl}
                   style={{
@@ -782,7 +883,9 @@ function Catalog({ user }) {
                   <a
                     href={
                       videoLink.includes("geo.dailymotion.com")
-                        ? `https://www.dailymotion.com/video/${videoLink.match(/video=([a-zA-Z0-9]+)/)?.[1] || ""}`
+                        ? `https://www.dailymotion.com/video/${
+                            videoLink.match(/video=([a-zA-Z0-9]+)/)?.[1] || ""
+                          }`
                         : videoLink
                     }
                     target="_blank"
@@ -795,14 +898,16 @@ function Catalog({ user }) {
               )}
             </div>
           ) : isDailymotionLink(videoLink) ? (
-            <div style={{
-              padding: "50px",
-              background: "#111",
-              borderRadius: "12px",
-              textAlign: "center",
-              marginBottom: "28px",
-              border: "1px solid #333"
-            }}>
+            <div
+              style={{
+                padding: "50px",
+                background: "#111",
+                borderRadius: "12px",
+                textAlign: "center",
+                marginBottom: "28px",
+                border: "1px solid #333"
+              }}
+            >
               <a
                 href={videoLink}
                 target="_blank"
@@ -822,30 +927,34 @@ function Catalog({ user }) {
               </a>
             </div>
           ) : (
-            <div style={{
+            <div
+              style={{
+                padding: "50px",
+                textAlign: "center",
+                color: "#888",
+                background: "#111",
+                borderRadius: "12px",
+                marginBottom: "28px"
+              }}
+            >
+              No se pudo cargar el video
+              <br />
+              <small style={{ color: "#666" }}>
+                Admitidos: Archive, YouTube, Drive, Mega, Dailymotion, Vimeo
+              </small>
+            </div>
+          )
+        ) : (
+          <div
+            style={{
               padding: "50px",
               textAlign: "center",
               color: "#888",
               background: "#111",
               borderRadius: "12px",
               marginBottom: "28px"
-            }}>
-              No se pudo cargar el video
-              <br />
-              <small style={{ color: "#666" }}>
-                Admitidos: Archive, YouTube, Drive, Mega, Dailymotion
-              </small>
-            </div>
-          )
-        ) : (
-          <div style={{
-            padding: "50px",
-            textAlign: "center",
-            color: "#888",
-            background: "#111",
-            borderRadius: "12px",
-            marginBottom: "28px"
-          }}>
+            }}
+          >
             No hay video disponible
           </div>
         )}
@@ -857,20 +966,36 @@ function Catalog({ user }) {
             </h2>
             {seasons.map((seasonNum) => (
               <div key={seasonNum} style={{ marginBottom: "28px" }}>
-                <h3 style={{
-                  margin: "0 0 12px 0",
-                  fontSize: "16px",
-                  color: "#ffaa55",
-                  borderBottom: "2px solid #ff6b00",
-                  paddingBottom: "8px",
-                  display: "inline-block"
-                }}>
+                <h3
+                  style={{
+                    margin: "0 0 12px 0",
+                    fontSize: "16px",
+                    color: "#ffaa55",
+                    borderBottom: "2px solid #ff6b00",
+                    paddingBottom: "8px",
+                    display: "inline-block"
+                  }}
+                >
                   Temporada {seasonNum}
-                  <span style={{ color: "#888", fontWeight: 400, fontSize: "14px", marginLeft: "8px" }}>
+                  <span
+                    style={{
+                      color: "#888",
+                      fontWeight: 400,
+                      fontSize: "14px",
+                      marginLeft: "8px"
+                    }}
+                  >
                     ({bySeason[seasonNum].length} episodios)
                   </span>
                 </h3>
-                <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "12px" }}>
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "10px",
+                    marginTop: "12px"
+                  }}
+                >
                   {bySeason[seasonNum].map((ep) => {
                     const num = ep.number;
                     const active =
@@ -896,18 +1021,20 @@ function Catalog({ user }) {
                           border: active ? "2px solid #ff6b00" : "1px solid #333"
                         }}
                       >
-                        <div style={{
-                          width: "52px",
-                          height: "42px",
-                          background: active ? "#ff6b00" : "#333",
-                          borderRadius: "8px",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          fontWeight: "bold",
-                          color: "#fff",
-                          fontSize: "16px"
-                        }}>
+                        <div
+                          style={{
+                            width: "52px",
+                            height: "42px",
+                            background: active ? "#ff6b00" : "#333",
+                            borderRadius: "8px",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            fontWeight: "bold",
+                            color: "#fff",
+                            fontSize: "16px"
+                          }}
+                        >
                           {num}
                         </div>
                         <div style={{ flex: 1 }}>
@@ -915,7 +1042,12 @@ function Catalog({ user }) {
                             Episodio {num}
                             {ep.title ? ` · ${ep.title}` : ""}
                           </div>
-                          <div style={{ fontSize: "13px", color: active ? "#ffb74d" : "#aaa" }}>
+                          <div
+                            style={{
+                              fontSize: "13px",
+                              color: active ? "#ffb74d" : "#aaa"
+                            }}
+                          >
                             {active ? "▶ Reproduciendo" : "Episodio"}
                           </div>
                         </div>
@@ -983,13 +1115,30 @@ function Catalog({ user }) {
                     border: "1px solid #333"
                   }}
                 >
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      marginBottom: "8px"
+                    }}
+                  >
                     <strong style={{ fontSize: "14px" }}>{c.displayName}</strong>
                     <span style={{ fontSize: "12px", color: "#666" }}>
-                      {c.createdAt?.toDate ? c.createdAt.toDate().toLocaleDateString() : ""}
+                      {c.createdAt?.toDate
+                        ? c.createdAt.toDate().toLocaleDateString()
+                        : ""}
                     </span>
                   </div>
-                  <p style={{ margin: 0, fontSize: "14px", color: "#ccc", lineHeight: 1.5 }}>{c.text}</p>
+                  <p
+                    style={{
+                      margin: 0,
+                      fontSize: "14px",
+                      color: "#ccc",
+                      lineHeight: 1.5
+                    }}
+                  >
+                    {c.text}
+                  </p>
                 </div>
               ))}
             </div>
@@ -999,8 +1148,17 @@ function Catalog({ user }) {
     );
   }
 
+  // ========== CATÁLOGO ==========
   return (
-    <div style={{ padding: "20px", maxWidth: "1400px", margin: "0 auto", color: "#fff", minHeight: "100vh" }}>
+    <div
+      style={{
+        padding: "20px",
+        maxWidth: "1400px",
+        margin: "0 auto",
+        color: "#fff",
+        minHeight: "100vh"
+      }}
+    >
       <div style={{ marginBottom: "28px" }}>
         <input
           type="text"
@@ -1020,7 +1178,14 @@ function Catalog({ user }) {
             outline: "none"
           }}
         />
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", alignItems: "center" }}>
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "10px",
+            alignItems: "center"
+          }}
+        >
           {["all", "movie", "series"].map((t) => (
             <button
               key={t}
@@ -1054,7 +1219,9 @@ function Catalog({ user }) {
           >
             <option value="all">Todos los años</option>
             {years.map((y) => (
-              <option key={y} value={y}>{y}</option>
+              <option key={y} value={y}>
+                {y}
+              </option>
             ))}
           </select>
           <button
@@ -1076,55 +1243,119 @@ function Catalog({ user }) {
       </div>
 
       {loading ? (
-        <p style={{ textAlign: "center", color: "#888", marginTop: "60px" }}>Cargando contenido...</p>
+        <p style={{ textAlign: "center", color: "#888", marginTop: "60px" }}>
+          Cargando contenido...
+        </p>
       ) : (
         <>
-          {!search && !showFavoritesOnly && filterType === "all" && filterYear === "all" && contents.length > 0 && (
-            <div style={{ marginBottom: "36px" }}>
-              <h2 style={{ margin: "0 0 16px 0", fontSize: "22px", fontWeight: 700, color: "#ff6b00" }}>
-                ✨ Nuevos agregados
-              </h2>
-              <div style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
-                gap: "16px"
-              }}>
-                {contents.slice(0, 6).map((item) => (
-                  <ContentCard key={`new-${item.id}`} item={item} />
-                ))}
+          {/* TRAILERS — fila horizontal */}
+          {!search &&
+            !showFavoritesOnly &&
+            filterType === "all" &&
+            filterYear === "all" &&
+            withTrailer.length > 0 && (
+              <div style={{ marginBottom: "36px" }}>
+                <h2
+                  style={{
+                    margin: "0 0 16px 0",
+                    fontSize: "22px",
+                    fontWeight: 700,
+                    color: "#ff6b00"
+                  }}
+                >
+                  ▶ Trailers
+                </h2>
+                <div
+                  style={{
+                    display: "flex",
+                    gap: "14px",
+                    overflowX: "auto",
+                    paddingBottom: "10px",
+                    WebkitOverflowScrolling: "touch"
+                  }}
+                >
+                  {withTrailer.map((item) => (
+                    <ContentCard key={`tr-${item.id}`} item={item} compact />
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {!search && !showFavoritesOnly && filterType === "all" && filterYear === "all" && recentHistory.length > 0 && (
-            <div style={{ marginBottom: "36px" }}>
-              <h2 style={{ margin: "0 0 16px 0", fontSize: "22px", fontWeight: 700 }}>Seguir viendo</h2>
-              <div style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
-                gap: "16px"
-              }}>
-                {recentHistory.map((item) => (
-                  <ContentCard key={`hist-${item.id}`} item={item} />
-                ))}
+          {!search &&
+            !showFavoritesOnly &&
+            filterType === "all" &&
+            filterYear === "all" &&
+            contents.length > 0 && (
+              <div style={{ marginBottom: "36px" }}>
+                <h2
+                  style={{
+                    margin: "0 0 16px 0",
+                    fontSize: "22px",
+                    fontWeight: 700,
+                    color: "#ff6b00"
+                  }}
+                >
+                  ✨ Nuevos agregados
+                </h2>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
+                    gap: "16px"
+                  }}
+                >
+                  {contents.slice(0, 6).map((item) => (
+                    <ContentCard key={`new-${item.id}`} item={item} />
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {!search && !showFavoritesOnly && filterType === "all" && filterYear === "all" && featured.length > 0 && (
-            <div style={{ marginBottom: "36px" }}>
-              <h2 style={{ margin: "0 0 16px 0", fontSize: "22px", fontWeight: 700 }}>Destacados</h2>
-              <div style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
-                gap: "16px"
-              }}>
-                {featured.map((item) => (
-                  <ContentCard key={`feat-${item.id}`} item={item} />
-                ))}
+          {!search &&
+            !showFavoritesOnly &&
+            filterType === "all" &&
+            filterYear === "all" &&
+            recentHistory.length > 0 && (
+              <div style={{ marginBottom: "36px" }}>
+                <h2 style={{ margin: "0 0 16px 0", fontSize: "22px", fontWeight: 700 }}>
+                  Seguir viendo
+                </h2>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
+                    gap: "16px"
+                  }}
+                >
+                  {recentHistory.map((item) => (
+                    <ContentCard key={`hist-${item.id}`} item={item} />
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
+            )}
+
+          {!search &&
+            !showFavoritesOnly &&
+            filterType === "all" &&
+            filterYear === "all" &&
+            featured.length > 0 && (
+              <div style={{ marginBottom: "36px" }}>
+                <h2 style={{ margin: "0 0 16px 0", fontSize: "22px", fontWeight: 700 }}>
+                  Destacados
+                </h2>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
+                    gap: "16px"
+                  }}
+                >
+                  {featured.map((item) => (
+                    <ContentCard key={`feat-${item.id}`} item={item} />
+                  ))}
+                </div>
+              </div>
+            )}
 
           <h2 style={{ margin: "0 0 16px 0", fontSize: "22px", fontWeight: 700 }}>
             {showFavoritesOnly
@@ -1142,11 +1373,13 @@ function Catalog({ user }) {
               No se encontró contenido
             </p>
           ) : (
-            <div style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(170px, 1fr))",
-              gap: "18px"
-            }}>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fill, minmax(170px, 1fr))",
+                gap: "18px"
+              }}
+            >
               {filtered.map((item) => (
                 <ContentCard key={item.id} item={item} />
               ))}
