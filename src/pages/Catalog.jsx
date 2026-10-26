@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import {
   collection,
   getDocs,
@@ -46,7 +46,7 @@ function Catalog({ user }) {
   };
 
   const getDeviceLabel = () => {
-    const ua = navigator.userAgent;
+    const ua = navigator.userAgent || "";
     if (/mobile/i.test(ua)) return "Celular";
     if (/tablet|ipad/i.test(ua)) return "Tablet";
     return "PC / Laptop";
@@ -54,18 +54,30 @@ function Catalog({ user }) {
 
   const isSubActive = () => {
     if (!user?.subscriptionExpiresAt) return false;
-    const expire = user.subscriptionExpiresAt.toDate
-      ? user.subscriptionExpiresAt.toDate()
-      : new Date(user.subscriptionExpiresAt);
-    return expire > new Date();
+    try {
+      const expire = user.subscriptionExpiresAt.toDate
+        ? user.subscriptionExpiresAt.toDate()
+        : new Date(user.subscriptionExpiresAt);
+      return expire > new Date();
+    } catch {
+      return false;
+    }
   };
 
   const isNewItem = (item) => {
     if (!item?.createdAt) return false;
-    const created = item.createdAt.toDate
-      ? item.createdAt.toDate()
-      : new Date(item.createdAt.seconds ? item.createdAt.seconds * 1000 : item.createdAt);
-    return Date.now() - created.getTime() < 7 * 24 * 60 * 60 * 1000;
+    try {
+      const created = item.createdAt.toDate
+        ? item.createdAt.toDate()
+        : new Date(
+            item.createdAt.seconds
+              ? item.createdAt.seconds * 1000
+              : item.createdAt
+          );
+      return Date.now() - created.getTime() < 7 * 24 * 60 * 60 * 1000;
+    } catch {
+      return false;
+    }
   };
 
   const getDecade = (year) => {
@@ -101,7 +113,7 @@ function Catalog({ user }) {
         userId: user.uid,
         deviceId,
         label: getDeviceLabel(),
-        userAgent: navigator.userAgent.slice(0, 120),
+        userAgent: (navigator.userAgent || "").slice(0, 120),
         createdAt: serverTimestamp(),
         lastSeen: serverTimestamp()
       });
@@ -116,44 +128,54 @@ function Catalog({ user }) {
     if (!user?.uid) return;
     checkDeviceLimit();
 
-    const unsubContent = onSnapshot(collection(db, "content"), (snap) => {
-      const list = [];
-      snap.forEach((d) => list.push({ id: d.id, ...d.data() }));
-      list.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
-      setContents(list);
-      setLoading(false);
-      setSelected((prev) => {
-        if (!prev) return null;
-        const updated = list.find((c) => c.id === prev.id);
-        return updated || prev;
-      });
-    });
+    const unsubContent = onSnapshot(
+      collection(db, "content"),
+      (snap) => {
+        const list = [];
+        snap.forEach((d) => list.push({ id: d.id, ...d.data() }));
+        list.sort(
+          (a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)
+        );
+        setContents(list);
+        setLoading(false);
+        setSelected((prev) => {
+          if (!prev) return null;
+          const updated = list.find((c) => c.id === prev.id);
+          return updated || prev;
+        });
+      },
+      (err) => {
+        console.error(err);
+        setLoading(false);
+      }
+    );
 
     const unsubRatings = onSnapshot(collection(db, "ratings"), (snap) => {
       const allRatings = {};
       snap.forEach((d) => {
         const data = d.data();
+        if (!data?.contentId) return;
         if (!allRatings[data.contentId]) allRatings[data.contentId] = [];
         allRatings[data.contentId].push(data);
       });
-      setContents((currentList) => {
-        const ratingsData = {};
-        currentList.forEach((item) => {
-          const itemRatings = allRatings[item.id] || [];
+      setRatings((prev) => {
+        const ratingsData = { ...prev };
+        Object.keys(allRatings).forEach((contentId) => {
+          const itemRatings = allRatings[contentId] || [];
           const count = itemRatings.length;
           const average =
             count > 0
-              ? itemRatings.reduce((s, r) => s + Number(r.rating), 0) / count
+              ? itemRatings.reduce((s, r) => s + Number(r.rating || 0), 0) /
+                count
               : 0;
           const userR = itemRatings.find((r) => r.userId === user.uid);
-          ratingsData[item.id] = {
+          ratingsData[contentId] = {
             average: Math.round(average * 10) / 10,
             count,
             userRating: userR ? Number(userR.rating) : 0
           };
         });
-        setRatings(ratingsData);
-        return currentList;
+        return ratingsData;
       });
     });
 
@@ -162,7 +184,8 @@ function Catalog({ user }) {
       (snap) => {
         const favs = {};
         snap.forEach((d) => {
-          favs[d.data().contentId] = true;
+          const cid = d.data()?.contentId;
+          if (cid) favs[cid] = true;
         });
         setFavorites(favs);
       }
@@ -173,7 +196,9 @@ function Catalog({ user }) {
       (snap) => {
         const hist = [];
         snap.forEach((d) => hist.push({ id: d.id, ...d.data() }));
-        hist.sort((a, b) => (b.watchedAt?.seconds || 0) - (a.watchedAt?.seconds || 0));
+        hist.sort(
+          (a, b) => (b.watchedAt?.seconds || 0) - (a.watchedAt?.seconds || 0)
+        );
         setHistory(hist.slice(0, 30));
       }
     );
@@ -204,7 +229,7 @@ function Catalog({ user }) {
       if (selected.type === "series" && currentEpisode) {
         return `${selected.title} — T${currentEpisode.season || 1}E${currentEpisode.number}`;
       }
-      return selected.title;
+      return selected.title || null;
     };
     updatePresence(getWatchingLabel(), selected?.id || null);
     const interval = setInterval(() => {
@@ -222,14 +247,14 @@ function Catalog({ user }) {
 
   const getYoutubeId = (link) => {
     if (!link) return null;
-    const m = link.match(
+    const m = String(link).match(
       /(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/
     );
     return m ? m[1] : null;
   };
 
   const isDirectVideo = (link) =>
-    link &&
+    !!link &&
     (/\.(mp4|webm|ogg)(\?|$)/i.test(link) ||
       link.includes("firebasestorage.googleapis.com") ||
       link.includes("supabase.co/storage") ||
@@ -238,7 +263,7 @@ function Catalog({ user }) {
 
   const getEmbedUrl = (link) => {
     if (!link) return null;
-    if (isDirectVideo(link)) return null; // se usa <video>
+    if (isDirectVideo(link)) return null;
     if (link.includes("geo.dailymotion.com/player/")) return link;
     const yt = getYoutubeId(link);
     if (yt) return `https://www.youtube.com/embed/${yt}?rel=0`;
@@ -273,7 +298,7 @@ function Catalog({ user }) {
     if (item.poster) return item.poster;
     if (item.driveLink) {
       const yt = getYoutubeId(item.driveLink);
-      if (yt) return `https://img.youtube.com/vi/${yt}/maxresdefault.jpg`;
+      if (yt) return `https://img.youtube.com/vi/${yt}/hqdefault.jpg`;
     }
     if (item.trailer) {
       const yt = getYoutubeId(item.trailer);
@@ -281,26 +306,27 @@ function Catalog({ user }) {
     }
     if (item.episodes?.[0]?.link) {
       const yt = getYoutubeId(item.episodes[0].link);
-      if (yt) return `https://img.youtube.com/vi/${yt}/maxresdefault.jpg`;
+      if (yt) return `https://img.youtube.com/vi/${yt}/hqdefault.jpg`;
     }
     return null;
   };
 
   const getHistoryFor = (contentId) =>
-    history.find((h) => h.contentId === contentId);
+    history.find((h) => h.contentId === contentId) || null;
 
   const getSeriesProgress = (item) => {
-    if (item.type !== "series" || !item.episodes?.length) return null;
+    if (!item || item.type !== "series" || !item.episodes?.length) return null;
     const h = getHistoryFor(item.id);
     const epNum = Number(h?.episodeNumber) || 0;
-    if (!epNum) return { pct: 5, label: "Empezar" };
     const total = item.episodes.length;
+    if (!epNum) return { pct: 4, label: "Empezar" };
     const pct = Math.min(100, Math.round((epNum / total) * 100));
     return { pct, label: `Ep. ${epNum}/${total}` };
   };
 
   const toggleFavorite = async (contentId, e) => {
-    e?.stopPropagation();
+    e?.stopPropagation?.();
+    if (!user?.uid || !contentId) return;
     const favId = `${user.uid}_${contentId}`;
     try {
       if (favorites[contentId]) {
@@ -319,6 +345,7 @@ function Catalog({ user }) {
   };
 
   const addToHistory = async (contentId, episodeNumber = null) => {
+    if (!user?.uid || !contentId) return;
     try {
       const histId = `${user.uid}_${contentId}`;
       await setDoc(
@@ -326,7 +353,7 @@ function Catalog({ user }) {
         {
           userId: user.uid,
           contentId,
-          episodeNumber,
+          episodeNumber: episodeNumber ?? null,
           watchedAt: serverTimestamp()
         },
         { merge: true }
@@ -337,7 +364,7 @@ function Catalog({ user }) {
   };
 
   const handleRate = async (contentId, rating) => {
-    if (savingRating) return;
+    if (savingRating || !user?.uid) return;
     setSavingRating(true);
     try {
       const ratingId = `${contentId}_${user.uid}`;
@@ -364,7 +391,9 @@ function Catalog({ user }) {
       (snap) => {
         const list = [];
         snap.forEach((d) => list.push({ id: d.id, ...d.data() }));
-        list.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+        list.sort(
+          (a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)
+        );
         setComments(list);
       }
     );
@@ -391,19 +420,27 @@ function Catalog({ user }) {
   };
 
   const handleShare = async (item) => {
+    if (!item) return;
     const url = window.location.origin;
-    const text = `Mira "${item.title}" en Retro Recuerdos 🎬`;
+    const text = `Mira "${item.title}" en Retro Recuerdos`;
     try {
       if (navigator.share) {
         await navigator.share({ title: item.title, text, url });
-      } else {
+      } else if (navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(`${text}\n${url}`);
         setShareMsg("Enlace copiado");
         setTimeout(() => setShareMsg(""), 2500);
+      } else {
+        window.open(
+          `https://wa.me/?text=${encodeURIComponent(text + " " + url)}`,
+          "_blank"
+        );
       }
-    } catch (e) {
-      const wa = `https://wa.me/?text=${encodeURIComponent(text + " " + url)}`;
-      window.open(wa, "_blank");
+    } catch {
+      window.open(
+        `https://wa.me/?text=${encodeURIComponent(text + " " + url)}`,
+        "_blank"
+      );
     }
   };
 
@@ -415,7 +452,11 @@ function Catalog({ user }) {
         {[1, 2, 3, 4, 5].map((s) => (
           <span
             key={s}
-            onClick={interactive && !savingRating ? () => handleRate(contentId, s) : undefined}
+            onClick={
+              interactive && !savingRating
+                ? () => handleRate(contentId, s)
+                : undefined
+            }
             style={{
               fontSize: size,
               cursor: interactive ? "pointer" : "default",
@@ -441,7 +482,7 @@ function Catalog({ user }) {
   };
 
   const StatusBadge = ({ item }) => {
-    if (item.type !== "series" || !item.seriesStatus) return null;
+    if (!item || item.type !== "series" || !item.seriesStatus) return null;
     const isFinished =
       item.seriesStatus === "finished" || item.seriesStatus === "finalizada";
     return (
@@ -570,22 +611,26 @@ function Catalog({ user }) {
   };
 
   const handleSelect = async (item) => {
-    setSelected(item);
-    setNewComment("");
+    if (!item) return;
     setShareMsg("");
+    setNewComment("");
+    setSelected(item);
 
     if (item.type === "series" && item.episodes?.length > 0) {
       const h = getHistoryFor(item.id);
       const savedEp = Number(h?.episodeNumber) || 0;
-      let ep =
-        item.episodes.find(
+      let ep = item.episodes[0];
+      if (savedEp) {
+        const found = item.episodes.find(
           (e, i) => Number(e.number || i + 1) === savedEp
-        ) || item.episodes[0];
+        );
+        if (found) ep = found;
+      }
       const idx = item.episodes.indexOf(ep);
       setCurrentEpisode({
         ...ep,
-        number: ep.number || idx + 1,
-        season: ep.season || 1
+        number: Number(ep.number) || idx + 1,
+        season: Number(ep.season) || 1
       });
     } else {
       setCurrentEpisode(null);
@@ -593,25 +638,33 @@ function Catalog({ user }) {
 
     await addToHistory(
       item.id,
-      item.type === "series" ? getHistoryFor(item.id)?.episodeNumber || null : null
+      item.type === "series"
+        ? getHistoryFor(item.id)?.episodeNumber || null
+        : null
     );
 
     try {
-      await updateDoc(doc(db, "users", user.uid), {
-        lastActiveAt: serverTimestamp(),
-        currentlyWatching: item.title,
-        currentlyWatchingId: item.id
-      });
+      if (user?.uid) {
+        await updateDoc(doc(db, "users", user.uid), {
+          lastActiveAt: serverTimestamp(),
+          currentlyWatching: item.title || null,
+          currentlyWatchingId: item.id
+        });
+      }
     } catch (e) {
       console.error(e);
     }
   };
 
   const handleBack = () => {
-    setSelected(null);
     setCurrentEpisode(null);
     setComments([]);
+    setNewComment("");
     setShareMsg("");
+    setSelected(null);
+    try {
+      window.scrollTo(0, 0);
+    } catch {}
     if (user?.uid) {
       updateDoc(doc(db, "users", user.uid), {
         lastActiveAt: serverTimestamp(),
@@ -621,21 +674,25 @@ function Catalog({ user }) {
     }
   };
 
-  const years = [...new Set(contents.map((c) => c.year).filter(Boolean))].sort(
-    (a, b) => b - a
-  );
+  const years = [
+    ...new Set(contents.map((c) => c.year).filter(Boolean))
+  ].sort((a, b) => b - a);
 
   const filtered = contents.filter((item) => {
     if (showFavoritesOnly && !favorites[item.id]) return false;
     if (filterType !== "all" && item.type !== filterType) return false;
-    if (filterYear !== "all" && String(item.year) !== String(filterYear)) return false;
-    if (filterDecade !== "all" && getDecade(item.year) !== filterDecade) return false;
+    if (filterYear !== "all" && String(item.year) !== String(filterYear))
+      return false;
+    if (filterDecade !== "all" && getDecade(item.year) !== filterDecade)
+      return false;
     if (search.trim()) {
       const q = search.toLowerCase().trim();
-      const inTitle = item.title?.toLowerCase().includes(q);
+      const inTitle = (item.title || "").toLowerCase().includes(q);
       const inArtists = Array.isArray(item.artists)
-        ? item.artists.some((a) => a.toLowerCase().includes(q))
-        : String(item.artists || "").toLowerCase().includes(q);
+        ? item.artists.some((a) => String(a).toLowerCase().includes(q))
+        : String(item.artists || "")
+            .toLowerCase()
+            .includes(q);
       if (!inTitle && !inArtists) return false;
     }
     return true;
@@ -654,33 +711,42 @@ function Catalog({ user }) {
     .filter(Boolean)
     .slice(0, 12);
 
-  const withTrailer = contents.filter((c) => c.trailer && String(c.trailer).trim());
+  const withTrailer = contents.filter(
+    (c) => c.trailer && String(c.trailer).trim()
+  );
   const seriesOnly = contents.filter((c) => c.type === "series");
   const moviesOnly = contents.filter((c) => c.type === "movie");
   const newest = contents.slice(0, 12);
 
-  const heroPool = useMemo(() => {
+  // Hero pool (sin useMemo para evitar bugs al volver)
+  const heroPool = (() => {
     const pool = [];
     const seen = new Set();
-    [...recentHistory, ...featured, ...newest].forEach((item) => {
-      if (item && !seen.has(item.id) && getPoster(item)) {
+    const add = (item) => {
+      if (item?.id && !seen.has(item.id) && getPoster(item)) {
         seen.add(item.id);
         pool.push(item);
       }
-    });
+    };
+    recentHistory.forEach(add);
+    featured.forEach(add);
+    newest.forEach(add);
     if (pool.length === 0 && contents[0]) pool.push(contents[0]);
     return pool;
-  }, [contents, recentHistory, featured, newest]);
+  })();
+
+  const safeHeroIndex =
+    heroPool.length > 0 ? heroIndex % heroPool.length : 0;
+  const heroItem = heroPool[safeHeroIndex] || null;
 
   useEffect(() => {
+    if (selected) return;
     if (heroPool.length <= 1) return;
     const t = setInterval(() => {
       setHeroIndex((i) => (i + 1) % heroPool.length);
     }, 8000);
     return () => clearInterval(t);
-  }, [heroPool.length]);
-
-  const heroItem = heroPool[heroIndex % Math.max(heroPool.length, 1)] || null;
+  }, [selected, heroPool.length]);
 
   const showHomeLanes =
     !search &&
@@ -699,6 +765,7 @@ function Catalog({ user }) {
   };
 
   const ContentCard = ({ item, showProgress }) => {
+    if (!item) return null;
     const poster = getPoster(item);
     const progress = showProgress ? getSeriesProgress(item) : null;
     const w = 160;
@@ -719,7 +786,8 @@ function Catalog({ user }) {
         }}
         onMouseEnter={(e) => {
           e.currentTarget.style.transform = "scale(1.05)";
-          e.currentTarget.style.boxShadow = "0 10px 28px rgba(255, 107, 0, 0.3)";
+          e.currentTarget.style.boxShadow =
+            "0 10px 28px rgba(255, 107, 0, 0.3)";
           e.currentTarget.style.borderColor = "#ff6b00";
         }}
         onMouseLeave={(e) => {
@@ -750,8 +818,13 @@ function Catalog({ user }) {
         {poster ? (
           <img
             src={poster}
-            alt={item.title}
-            style={{ width: "100%", height: h, objectFit: "cover", display: "block" }}
+            alt={item.title || ""}
+            style={{
+              width: "100%",
+              height: h,
+              objectFit: "cover",
+              display: "block"
+            }}
           />
         ) : (
           <div
@@ -836,7 +909,14 @@ function Catalog({ user }) {
     if (!items?.length) return null;
     return (
       <div style={{ marginBottom: 32 }}>
-        <h2 style={{ margin: "0 0 14px 0", fontSize: 20, fontWeight: 700, color }}>
+        <h2
+          style={{
+            margin: "0 0 14px 0",
+            fontSize: 20,
+            fontWeight: 700,
+            color
+          }}
+        >
           {title}
         </h2>
         <div style={rowScrollStyle}>
@@ -881,12 +961,14 @@ function Catalog({ user }) {
 
     return (
       <div
+        key={`detail-${selected.id}`}
         style={{
           padding: "20px",
           maxWidth: "1100px",
           margin: "0 auto",
           color: "#fff",
-          minHeight: "100vh"
+          minHeight: "100vh",
+          background: "#111"
         }}
       >
         <button
@@ -961,17 +1043,22 @@ function Catalog({ user }) {
                 fontSize: 14
               }}
             >
-              {favorites[selected.id] ? "❤️ En favoritos" : "🤍 Agregar a favoritos"}
+              {favorites[selected.id]
+                ? "❤️ En favoritos"
+                : "🤍 Agregar a favoritos"}
             </button>
           </div>
         </div>
         {shareMsg && (
-          <p style={{ color: "#4CAF50", margin: "0 0 12px", fontSize: 14 }}>{shareMsg}</p>
+          <p style={{ color: "#4CAF50", margin: "0 0 12px", fontSize: 14 }}>
+            {shareMsg}
+          </p>
         )}
 
         {isSeries && currentEpisode && (
           <p style={{ color: "#ff9800", margin: "0 0 8px", fontWeight: 600 }}>
-            Temporada {currentEpisode.season || 1} · Episodio {currentEpisode.number}
+            Temporada {currentEpisode.season || 1} · Episodio{" "}
+            {currentEpisode.number}
             {currentEpisode.title ? `: ${currentEpisode.title}` : ""}
           </p>
         )}
@@ -993,12 +1080,21 @@ function Catalog({ user }) {
         )}
 
         <div style={{ marginBottom: 20 }}>
-          <p style={{ margin: "0 0 6px", fontSize: 14, color: "#ccc" }}>Tu calificación:</p>
+          <p style={{ margin: "0 0 6px", fontSize: 14, color: "#ccc" }}>
+            Tu calificación:
+          </p>
           <Stars contentId={selected.id} size={28} interactive />
         </div>
 
         {selected.description && (
-          <p style={{ marginBottom: 24, color: "#ccc", lineHeight: 1.6, fontSize: 15 }}>
+          <p
+            style={{
+              marginBottom: 24,
+              color: "#ccc",
+              lineHeight: 1.6,
+              fontSize: 15
+            }}
+          >
             {selected.description}
           </p>
         )}
@@ -1017,7 +1113,9 @@ function Catalog({ user }) {
             }}
           >
             <h3 style={{ color: "#ff9800", marginTop: 0 }}>
-              {!isSubActive() ? "Suscripción vencida" : "Límite de dispositivos"}
+              {!isSubActive()
+                ? "Suscripción vencida"
+                : "Límite de dispositivos"}
             </h3>
             <p style={{ color: "#ccc" }}>
               {!isSubActive()
@@ -1085,6 +1183,7 @@ function Catalog({ user }) {
               >
                 <iframe
                   src={embedUrl}
+                  title="player"
                   style={{
                     position: "absolute",
                     top: 0,
@@ -1145,7 +1244,7 @@ function Catalog({ user }) {
                 padding: 50,
                 textAlign: "center",
                 color: "#888",
-                background: "#111",
+                background: "#1a1a1a",
                 borderRadius: 12,
                 marginBottom: 28
               }}
@@ -1159,7 +1258,7 @@ function Catalog({ user }) {
               padding: 50,
               textAlign: "center",
               color: "#888",
-              background: "#111",
+              background: "#1a1a1a",
               borderRadius: 12,
               marginBottom: 28
             }}
@@ -1215,7 +1314,11 @@ function Catalog({ user }) {
                         key={`${seasonNum}-${num}-${ep._index}`}
                         onClick={() => {
                           if (!canPlay) return;
-                          setCurrentEpisode({ ...ep, number: num, season: seasonNum });
+                          setCurrentEpisode({
+                            ...ep,
+                            number: num,
+                            season: seasonNum
+                          });
                           addToHistory(selected.id, num);
                         }}
                         style={{
@@ -1227,7 +1330,9 @@ function Catalog({ user }) {
                           borderRadius: 10,
                           cursor: canPlay ? "pointer" : "not-allowed",
                           opacity: canPlay ? 1 : 0.6,
-                          border: active ? "2px solid #ff6b00" : "1px solid #333"
+                          border: active
+                            ? "2px solid #ff6b00"
+                            : "1px solid #333"
                         }}
                       >
                         <div
@@ -1269,7 +1374,13 @@ function Catalog({ user }) {
           </div>
         )}
 
-        <div style={{ marginTop: 10, borderTop: "1px solid #333", paddingTop: 24 }}>
+        <div
+          style={{
+            marginTop: 10,
+            borderTop: "1px solid #333",
+            paddingTop: 24
+          }}
+        >
           <h2 style={{ margin: "0 0 16px", fontSize: 20 }}>
             Comentarios ({comments.length})
           </h2>
@@ -1338,7 +1449,14 @@ function Catalog({ user }) {
                         : ""}
                     </span>
                   </div>
-                  <p style={{ margin: 0, fontSize: 14, color: "#ccc", lineHeight: 1.5 }}>
+                  <p
+                    style={{
+                      margin: 0,
+                      fontSize: 14,
+                      color: "#ccc",
+                      lineHeight: 1.5
+                    }}
+                  >
                     {c.text}
                   </p>
                 </div>
@@ -1353,12 +1471,14 @@ function Catalog({ user }) {
   // ========== HOME ==========
   return (
     <div
+      key="catalog-home"
       style={{
         padding: "0 0 40px",
         maxWidth: 1400,
         margin: "0 auto",
         color: "#fff",
-        minHeight: "100vh"
+        minHeight: "100vh",
+        background: "#111"
       }}
     >
       {showHomeLanes && heroItem && (
@@ -1384,8 +1504,7 @@ function Catalog({ user }) {
                 height: "100%",
                 objectFit: "cover",
                 opacity: 0.45,
-                filter: "blur(2px)",
-                transition: "opacity 0.6s"
+                filter: "blur(2px)"
               }}
             />
           )}
@@ -1510,17 +1629,16 @@ function Catalog({ user }) {
                 {heroPool.slice(0, 6).map((_, i) => (
                   <button
                     key={i}
+                    type="button"
                     onClick={() => setHeroIndex(i)}
                     style={{
-                      width: i === heroIndex % heroPool.length ? 20 : 8,
+                      width: i === safeHeroIndex ? 20 : 8,
                       height: 8,
                       borderRadius: 4,
                       border: "none",
-                      background:
-                        i === heroIndex % heroPool.length ? "#ff6b00" : "#555",
+                      background: i === safeHeroIndex ? "#ff6b00" : "#555",
                       cursor: "pointer",
-                      padding: 0,
-                      transition: "width 0.2s"
+                      padding: 0
                     }}
                   />
                 ))}
@@ -1550,10 +1668,18 @@ function Catalog({ user }) {
               outline: "none"
             }}
           />
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 10,
+              alignItems: "center"
+            }}
+          >
             {["all", "movie", "series"].map((t) => (
               <button
                 key={t}
+                type="button"
                 onClick={() => setFilterType(t)}
                 style={{
                   padding: "9px 18px",
@@ -1572,6 +1698,7 @@ function Catalog({ user }) {
             {["all", "70s", "80s", "90s", "2000s"].map((d) => (
               <button
                 key={d}
+                type="button"
                 onClick={() => setFilterDecade(d)}
                 style={{
                   padding: "9px 14px",
@@ -1608,6 +1735,7 @@ function Catalog({ user }) {
               ))}
             </select>
             <button
+              type="button"
               onClick={() => setShowFavoritesOnly(!showFavoritesOnly)}
               style={{
                 padding: "9px 18px",
@@ -1641,6 +1769,11 @@ function Catalog({ user }) {
             <Lane title="Series" items={seriesOnly} />
             <Lane title="Películas" items={moviesOnly} />
             <Lane title="Destacados" items={featured} />
+            {contents.length === 0 && (
+              <p style={{ color: "#888", textAlign: "center", marginTop: 40 }}>
+                Aún no hay contenido en el catálogo
+              </p>
+            )}
           </>
         ) : (
           <>
