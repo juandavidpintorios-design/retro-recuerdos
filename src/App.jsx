@@ -15,11 +15,14 @@ function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showRegister, setShowRegister] = useState(false);
-  const [adminView, setAdminView] = useState(null); // null | "users" | "content"
+  const [adminView, setAdminView] = useState(null);
   const [page, setPage] = useState("catalog");
-  const [maintenance, setMaintenance] = useState(null);
+  const [maintenance, setMaintenance] = useState(null); // Date o null
   const [checkingUpdate, setCheckingUpdate] = useState(true);
-  const [theme, setTheme] = useState(() => localStorage.getItem("retro_theme") || "villano");
+  const [countdown, setCountdown] = useState({ m: 0, s: 0, total: 0, pct: 100 });
+  const [theme, setTheme] = useState(
+    () => localStorage.getItem("retro_theme") || "villano"
+  );
 
   const isAdmin = user?.role === "admin";
   const isEditor = user?.role === "editor" || isAdmin;
@@ -51,51 +54,78 @@ function App() {
   const daysLeft = getDaysLeft();
   const showSubWarning = daysLeft !== null && daysLeft >= 0 && daysLeft <= 7;
 
-  // Mantenimiento / versión
+  // Mantenimiento / versión (tiempo real)
   useEffect(() => {
-    const checkUpdate = async () => {
-      try {
-        const snap = await getDoc(doc(db, "settings", "app"));
-        if (!snap.exists()) {
-          setCheckingUpdate(false);
-          return;
-        }
-        const data = snap.data();
-        const remoteVersion = data.version || "1";
-        const localVersion = localStorage.getItem("app_version");
+    const unsub = onSnapshot(
+      doc(db, "settings", "app"),
+      async (snap) => {
+        try {
+          if (!snap.exists()) {
+            setMaintenance(null);
+            setCheckingUpdate(false);
+            return;
+          }
+          const data = snap.data();
+          const remoteVersion = data.version || "1";
+          const localVersion = localStorage.getItem("app_version");
 
-        if (data.maintenanceUntil?.toDate) {
-          const until = data.maintenanceUntil.toDate();
-          if (until > new Date()) {
-            setMaintenance(until);
+          if (data.maintenanceUntil?.toDate) {
+            const until = data.maintenanceUntil.toDate();
+            if (until > new Date()) {
+              setMaintenance(until);
+              if (auth.currentUser) {
+                await signOut(auth);
+                setUser(null);
+              }
+              setCheckingUpdate(false);
+              return;
+            }
+          }
+
+          setMaintenance(null);
+
+          if (localVersion && localVersion !== remoteVersion) {
             if (auth.currentUser) {
               await signOut(auth);
               setUser(null);
             }
-            setCheckingUpdate(false);
-            return;
           }
+          localStorage.setItem("app_version", remoteVersion);
+        } catch (err) {
+          console.error(err);
         }
-
-        setMaintenance(null);
-
-        if (localVersion && localVersion !== remoteVersion) {
-          if (auth.currentUser) {
-            await signOut(auth);
-            setUser(null);
-          }
-        }
-        localStorage.setItem("app_version", remoteVersion);
-      } catch (err) {
+        setCheckingUpdate(false);
+      },
+      (err) => {
         console.error(err);
+        setCheckingUpdate(false);
       }
-      setCheckingUpdate(false);
+    );
+    return () => unsub();
+  }, []);
+
+  // Cuenta regresiva cada segundo
+  useEffect(() => {
+    if (!maintenance) return;
+
+    const TOTAL_MS = 4 * 60 * 1000; // referencia visual de 4 min
+
+    const tick = () => {
+      const left = Math.max(0, maintenance.getTime() - Date.now());
+      const m = Math.floor(left / 60000);
+      const s = Math.floor((left % 60000) / 1000);
+      const pct = Math.min(100, Math.round((left / TOTAL_MS) * 100));
+      setCountdown({ m, s, total: left, pct });
+
+      if (left <= 0) {
+        setMaintenance(null);
+      }
     };
 
-    checkUpdate();
-    const interval = setInterval(checkUpdate, 20000);
-    return () => clearInterval(interval);
-  }, []);
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [maintenance]);
 
   // Auth inicial
   useEffect(() => {
@@ -136,7 +166,6 @@ function App() {
   // Suscripción + rol en tiempo real
   useEffect(() => {
     if (!user?.uid) return;
-
     const unsub = onSnapshot(doc(db, "users", user.uid), (snap) => {
       if (!snap.exists()) {
         setUser(null);
@@ -159,17 +188,13 @@ function App() {
           subscriptionExpiresAt: data.subscriptionExpiresAt || null
         };
       });
-
-      // Si deja de ser admin/editor y estaba en panel, salir
       const role = data.role || "user";
       if (role !== "admin" && role !== "editor") {
         setAdminView(null);
       } else if (role === "editor") {
-        // Editor no puede ver usuarios
         setAdminView((v) => (v === "users" ? "content" : v));
       }
     });
-
     return () => unsub();
   }, [user?.uid]);
 
@@ -189,32 +214,116 @@ function App() {
     setUser(updatedUser);
   };
 
-  if (maintenance && maintenance > new Date()) {
-    const mins = Math.max(1, Math.ceil((maintenance - new Date()) / 60000));
+  // ========== PANTALLA DE ACTUALIZACIÓN ==========
+  if (maintenance && countdown.total > 0) {
+    const mm = String(countdown.m).padStart(2, "0");
+    const ss = String(countdown.s).padStart(2, "0");
+
     return (
       <div
         style={{
           minHeight: "100vh",
-          background: "#0d0221",
+          background:
+            "radial-gradient(ellipse at top, #2a1500 0%, #0d0d0d 55%, #000 100%)",
           color: "#fff",
           display: "flex",
-          flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
-          padding: "20px",
-          textAlign: "center"
+          padding: 24
         }}
       >
-        <h1 style={{ color: "#ff6b00", marginBottom: "12px" }}>
-          Actualizando Retro Recuerdos
-        </h1>
-        <p style={{ color: "#ccc", fontSize: "18px", maxWidth: "400px" }}>
-          Estamos aplicando una actualización. El acceso estará disponible en aproximadamente:
-        </p>
-        <p style={{ fontSize: "48px", fontWeight: 900, color: "#ffcc00", margin: "20px 0" }}>
-          {mins} min
-        </p>
-        <p style={{ color: "#888" }}>Luego inicia sesión otra vez para continuar.</p>
+        <div
+          style={{
+            maxWidth: 420,
+            width: "100%",
+            textAlign: "center",
+            background: "rgba(20,20,20,0.92)",
+            border: "1px solid #ff6b00",
+            borderRadius: 20,
+            padding: "32px 24px",
+            boxShadow: "0 0 40px rgba(255,107,0,0.25)"
+          }}
+        >
+          {/* Cambia el nombre si tu archivo no es goku.gif */}
+          <img
+            src="/goku.gif"
+            alt="Actualizando..."
+            style={{
+              width: "100%",
+              maxWidth: 300,
+              height: "auto",
+              margin: "0 auto 16px",
+              display: "block",
+              borderRadius: 12,
+              border: "2px solid #ff6b00",
+              boxShadow: "0 0 24px rgba(255, 200, 0, 0.3)"
+            }}
+          />
+
+          <h1
+            style={{
+              margin: "0 0 8px",
+              fontSize: 22,
+              fontWeight: 800,
+              color: "#ff6b00"
+            }}
+          >
+            ¡Poder al máximo!
+          </h1>
+
+          <p
+            style={{
+              margin: "0 0 20px",
+              color: "#bbb",
+              fontSize: 14,
+              lineHeight: 1.5
+            }}
+          >
+            Retro Recuerdos se está transformando…
+            <br />
+            El acceso se reabre cuando el contador llegue a cero.
+          </p>
+
+          <div
+            style={{
+              fontSize: 52,
+              fontWeight: 800,
+              fontVariantNumeric: "tabular-nums",
+              letterSpacing: 4,
+              marginBottom: 6,
+              textShadow: "0 0 20px rgba(255,107,0,0.5)"
+            }}
+          >
+            {mm}:{ss}
+          </div>
+          <p style={{ margin: "0 0 16px", color: "#888", fontSize: 13 }}>
+            minutos restantes
+          </p>
+
+          <div
+            style={{
+              height: 10,
+              background: "#333",
+              borderRadius: 8,
+              overflow: "hidden",
+              marginBottom: 20
+            }}
+          >
+            <div
+              style={{
+                height: "100%",
+                width: `${countdown.pct}%`,
+                background: "linear-gradient(90deg, #e65100, #ff6b00, #ffb74d)",
+                borderRadius: 8,
+                transition: "width 1s linear"
+              }}
+            />
+          </div>
+
+          <p style={{ margin: 0, color: "#aaa", fontSize: 13 }}>
+            Luego inicia sesión otra vez para continuar.
+          </p>
+        </div>
       </div>
     );
   }
@@ -237,9 +346,7 @@ function App() {
 
   // ========== PANEL ADMIN / EDITOR ==========
   if (user && isEditor && adminView) {
-    // Editor solo puede "content"
     const view = isAdmin ? adminView : "content";
-
     return (
       <div style={{ minHeight: "100vh", backgroundColor: "#111", color: "white" }}>
         <div
@@ -306,7 +413,6 @@ function App() {
             </button>
           </div>
         </div>
-
         {isAdmin && view === "users" && <Admin />}
         {view === "content" && <ContentAdmin user={user} />}
       </div>
@@ -316,7 +422,13 @@ function App() {
   // ========== USUARIO LOGUEADO ==========
   if (user) {
     return (
-      <div style={{ minHeight: "100vh", backgroundColor: colors.bg, color: colors.text }}>
+      <div
+        style={{
+          minHeight: "100vh",
+          backgroundColor: colors.bg,
+          color: colors.text
+        }}
+      >
         {showSubWarning && (
           <div
             style={{
@@ -330,10 +442,11 @@ function App() {
           >
             {daysLeft === 0
               ? "⚠️ Tu suscripción vence hoy. Renueva para no perder el acceso."
-              : `⚠️ Tu suscripción vence en ${daysLeft} día${daysLeft === 1 ? "" : "s"}. Contacta al administrador para renovar.`}
+              : `⚠️ Tu suscripción vence en ${daysLeft} día${
+                  daysLeft === 1 ? "" : "s"
+                }. Contacta al administrador para renovar.`}
           </div>
         )}
-
         <div
           style={{
             padding: "12px 20px",
@@ -352,8 +465,14 @@ function App() {
           >
             Retro Recuerdos
           </h2>
-
-          <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+          <div
+            style={{
+              display: "flex",
+              gap: "8px",
+              alignItems: "center",
+              flexWrap: "wrap"
+            }}
+          >
             {[
               { id: "catalog", label: "Catálogo" },
               { id: "profile", label: "Mi Perfil" },
@@ -365,7 +484,8 @@ function App() {
                 onClick={() => setPage(p.id)}
                 style={{
                   padding: "7px 14px",
-                  backgroundColor: page === p.id ? colors.accent : isHeroe ? "#ddd" : "#333",
+                  backgroundColor:
+                    page === p.id ? colors.accent : isHeroe ? "#ddd" : "#333",
                   color: page === p.id || !isHeroe ? "#fff" : "#222",
                   border: "none",
                   borderRadius: "4px",
@@ -376,7 +496,6 @@ function App() {
                 {p.label}
               </button>
             ))}
-
             <button
               onClick={toggleTheme}
               style={{
@@ -392,8 +511,6 @@ function App() {
             >
               {isHeroe ? "😈 Villano" : "🦸 Héroe"}
             </button>
-
-            {/* Solo ADMIN: Usuarios */}
             {isAdmin && (
               <button
                 onClick={() => setAdminView("users")}
@@ -410,8 +527,6 @@ function App() {
                 Usuarios
               </button>
             )}
-
-            {/* ADMIN o EDITOR: Contenido */}
             {isEditor && (
               <button
                 onClick={() => setAdminView("content")}
@@ -428,13 +543,11 @@ function App() {
                 Contenido
               </button>
             )}
-
             <span style={{ fontSize: "13px", color: colors.muted }}>
               Hola, {user.displayName}
               {user.role === "editor" && " (Editor)"}
               {user.role === "admin" && " (Admin)"}
             </span>
-
             <button
               onClick={handleLogout}
               style={{
@@ -451,9 +564,10 @@ function App() {
             </button>
           </div>
         </div>
-
         {page === "catalog" && <Catalog user={user} />}
-        {page === "profile" && <Profile user={user} onUserUpdate={handleUserUpdate} />}
+        {page === "profile" && (
+          <Profile user={user} onUserUpdate={handleUserUpdate} />
+        )}
         {page === "requests" && <Requests user={user} />}
         {page === "about" && <About />}
       </div>
@@ -470,7 +584,12 @@ function App() {
             ¿Ya tienes cuenta?{" "}
             <button
               onClick={() => setShowRegister(false)}
-              style={{ background: "none", border: "none", color: "#64b5f6", cursor: "pointer" }}
+              style={{
+                background: "none",
+                border: "none",
+                color: "#64b5f6",
+                cursor: "pointer"
+              }}
             >
               Inicia sesión
             </button>
@@ -483,7 +602,12 @@ function App() {
             ¿No tienes cuenta?{" "}
             <button
               onClick={() => setShowRegister(true)}
-              style={{ background: "none", border: "none", color: "#64b5f6", cursor: "pointer" }}
+              style={{
+                background: "none",
+                border: "none",
+                color: "#64b5f6",
+                cursor: "pointer"
+              }}
             >
               Regístrate
             </button>
