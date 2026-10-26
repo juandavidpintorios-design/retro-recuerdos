@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   collection,
   getDocs,
@@ -23,6 +23,7 @@ function Catalog({ user }) {
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState("all");
   const [filterYear, setFilterYear] = useState("all");
+  const [filterDecade, setFilterDecade] = useState("all");
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const [ratings, setRatings] = useState({});
   const [favorites, setFavorites] = useState({});
@@ -32,6 +33,8 @@ function Catalog({ user }) {
   const [savingRating, setSavingRating] = useState(false);
   const [savingComment, setSavingComment] = useState(false);
   const [deviceAllowed, setDeviceAllowed] = useState(true);
+  const [heroIndex, setHeroIndex] = useState(0);
+  const [shareMsg, setShareMsg] = useState("");
 
   const getDeviceId = () => {
     let id = localStorage.getItem("retro_device_id");
@@ -55,6 +58,25 @@ function Catalog({ user }) {
       ? user.subscriptionExpiresAt.toDate()
       : new Date(user.subscriptionExpiresAt);
     return expire > new Date();
+  };
+
+  const isNewItem = (item) => {
+    if (!item?.createdAt) return false;
+    const created = item.createdAt.toDate
+      ? item.createdAt.toDate()
+      : new Date(item.createdAt.seconds ? item.createdAt.seconds * 1000 : item.createdAt);
+    return Date.now() - created.getTime() < 7 * 24 * 60 * 60 * 1000;
+  };
+
+  const getDecade = (year) => {
+    const y = Number(year);
+    if (!y) return null;
+    if (y >= 1970 && y <= 1979) return "70s";
+    if (y >= 1980 && y <= 1989) return "80s";
+    if (y >= 1990 && y <= 1999) return "90s";
+    if (y >= 2000 && y <= 2009) return "2000s";
+    if (y >= 2010) return "2010+";
+    return null;
   };
 
   const checkDeviceLimit = async () => {
@@ -152,7 +174,7 @@ function Catalog({ user }) {
         const hist = [];
         snap.forEach((d) => hist.push({ id: d.id, ...d.data() }));
         hist.sort((a, b) => (b.watchedAt?.seconds || 0) - (a.watchedAt?.seconds || 0));
-        setHistory(hist.slice(0, 20));
+        setHistory(hist.slice(0, 30));
       }
     );
 
@@ -206,8 +228,17 @@ function Catalog({ user }) {
     return m ? m[1] : null;
   };
 
+  const isDirectVideo = (link) =>
+    link &&
+    (/\.(mp4|webm|ogg)(\?|$)/i.test(link) ||
+      link.includes("firebasestorage.googleapis.com") ||
+      link.includes("supabase.co/storage") ||
+      link.includes("r2.dev") ||
+      link.includes("b-cdn.net"));
+
   const getEmbedUrl = (link) => {
     if (!link) return null;
+    if (isDirectVideo(link)) return null; // se usa <video>
     if (link.includes("geo.dailymotion.com/player/")) return link;
     const yt = getYoutubeId(link);
     if (yt) return `https://www.youtube.com/embed/${yt}?rel=0`;
@@ -253,6 +284,19 @@ function Catalog({ user }) {
       if (yt) return `https://img.youtube.com/vi/${yt}/maxresdefault.jpg`;
     }
     return null;
+  };
+
+  const getHistoryFor = (contentId) =>
+    history.find((h) => h.contentId === contentId);
+
+  const getSeriesProgress = (item) => {
+    if (item.type !== "series" || !item.episodes?.length) return null;
+    const h = getHistoryFor(item.id);
+    const epNum = Number(h?.episodeNumber) || 0;
+    if (!epNum) return { pct: 5, label: "Empezar" };
+    const total = item.episodes.length;
+    const pct = Math.min(100, Math.round((epNum / total) * 100));
+    return { pct, label: `Ep. ${epNum}/${total}` };
   };
 
   const toggleFavorite = async (contentId, e) => {
@@ -346,6 +390,23 @@ function Catalog({ user }) {
     setSavingComment(false);
   };
 
+  const handleShare = async (item) => {
+    const url = window.location.origin;
+    const text = `Mira "${item.title}" en Retro Recuerdos 🎬`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: item.title, text, url });
+      } else {
+        await navigator.clipboard.writeText(`${text}\n${url}`);
+        setShareMsg("Enlace copiado");
+        setTimeout(() => setShareMsg(""), 2500);
+      }
+    } catch (e) {
+      const wa = `https://wa.me/?text=${encodeURIComponent(text + " " + url)}`;
+      window.open(wa, "_blank");
+    }
+  };
+
   const Stars = ({ contentId, size = 18, interactive = false }) => {
     const data = ratings[contentId] || { average: 0, count: 0, userRating: 0 };
     const display = interactive ? data.userRating || 0 : data.average;
@@ -401,15 +462,52 @@ function Catalog({ user }) {
     );
   };
 
+  const NewBadge = ({ item }) => {
+    if (!isNewItem(item)) return null;
+    return (
+      <span
+        style={{
+          position: "absolute",
+          top: 8,
+          left: 8,
+          background: "#ff6b00",
+          color: "#fff",
+          fontSize: 10,
+          fontWeight: 800,
+          padding: "3px 8px",
+          borderRadius: 4,
+          zIndex: 2,
+          letterSpacing: 0.5
+        }}
+      >
+        NUEVO
+      </span>
+    );
+  };
+
   const TrailerPlayer = ({ trailerUrl }) => {
     if (!trailerUrl || !String(trailerUrl).trim()) return null;
     const embed = getEmbedUrl(trailerUrl);
+    const direct = isDirectVideo(trailerUrl);
     return (
       <div style={{ marginBottom: "24px" }}>
         <h3 style={{ margin: "0 0 12px 0", color: "#ffaa55", fontSize: "16px" }}>
           ▶ Tráiler
         </h3>
-        {embed ? (
+        {direct ? (
+          <video
+            src={trailerUrl}
+            controls
+            playsInline
+            style={{
+              width: "100%",
+              maxWidth: 640,
+              borderRadius: 12,
+              background: "#000",
+              border: "1px solid #333"
+            }}
+          />
+        ) : embed ? (
           <div
             style={{
               position: "relative",
@@ -449,9 +547,6 @@ function Catalog({ user }) {
               textAlign: "center"
             }}
           >
-            <p style={{ color: "#aaa", margin: "0 0 12px 0" }}>
-              No se pudo embeber el tráiler
-            </p>
             <a
               href={trailerUrl}
               target="_blank"
@@ -477,17 +572,30 @@ function Catalog({ user }) {
   const handleSelect = async (item) => {
     setSelected(item);
     setNewComment("");
+    setShareMsg("");
+
     if (item.type === "series" && item.episodes?.length > 0) {
-      const first = item.episodes[0];
+      const h = getHistoryFor(item.id);
+      const savedEp = Number(h?.episodeNumber) || 0;
+      let ep =
+        item.episodes.find(
+          (e, i) => Number(e.number || i + 1) === savedEp
+        ) || item.episodes[0];
+      const idx = item.episodes.indexOf(ep);
       setCurrentEpisode({
-        ...first,
-        number: first.number || 1,
-        season: first.season || 1
+        ...ep,
+        number: ep.number || idx + 1,
+        season: ep.season || 1
       });
     } else {
       setCurrentEpisode(null);
     }
-    await addToHistory(item.id);
+
+    await addToHistory(
+      item.id,
+      item.type === "series" ? getHistoryFor(item.id)?.episodeNumber || null : null
+    );
+
     try {
       await updateDoc(doc(db, "users", user.uid), {
         lastActiveAt: serverTimestamp(),
@@ -503,6 +611,7 @@ function Catalog({ user }) {
     setSelected(null);
     setCurrentEpisode(null);
     setComments([]);
+    setShareMsg("");
     if (user?.uid) {
       updateDoc(doc(db, "users", user.uid), {
         lastActiveAt: serverTimestamp(),
@@ -520,6 +629,7 @@ function Catalog({ user }) {
     if (showFavoritesOnly && !favorites[item.id]) return false;
     if (filterType !== "all" && item.type !== filterType) return false;
     if (filterYear !== "all" && String(item.year) !== String(filterYear)) return false;
+    if (filterDecade !== "all" && getDecade(item.year) !== filterDecade) return false;
     if (search.trim()) {
       const q = search.toLowerCase().trim();
       const inTitle = item.title?.toLowerCase().includes(q);
@@ -536,7 +646,11 @@ function Catalog({ user }) {
     .slice(0, 12);
 
   const recentHistory = history
-    .map((h) => contents.find((c) => c.id === h.contentId))
+    .map((h) => {
+      const c = contents.find((x) => x.id === h.contentId);
+      if (!c) return null;
+      return { ...c, _histEp: h.episodeNumber };
+    })
     .filter(Boolean)
     .slice(0, 12);
 
@@ -545,15 +659,35 @@ function Catalog({ user }) {
   const moviesOnly = contents.filter((c) => c.type === "movie");
   const newest = contents.slice(0, 12);
 
-  const heroItem =
-    recentHistory[0] ||
-    featured[0] ||
-    contents.find((c) => getPoster(c)) ||
-    contents[0] ||
-    null;
+  const heroPool = useMemo(() => {
+    const pool = [];
+    const seen = new Set();
+    [...recentHistory, ...featured, ...newest].forEach((item) => {
+      if (item && !seen.has(item.id) && getPoster(item)) {
+        seen.add(item.id);
+        pool.push(item);
+      }
+    });
+    if (pool.length === 0 && contents[0]) pool.push(contents[0]);
+    return pool;
+  }, [contents, recentHistory, featured, newest]);
+
+  useEffect(() => {
+    if (heroPool.length <= 1) return;
+    const t = setInterval(() => {
+      setHeroIndex((i) => (i + 1) % heroPool.length);
+    }, 8000);
+    return () => clearInterval(t);
+  }, [heroPool.length]);
+
+  const heroItem = heroPool[heroIndex % Math.max(heroPool.length, 1)] || null;
 
   const showHomeLanes =
-    !search && !showFavoritesOnly && filterType === "all" && filterYear === "all";
+    !search &&
+    !showFavoritesOnly &&
+    filterType === "all" &&
+    filterYear === "all" &&
+    filterDecade === "all";
 
   const rowScrollStyle = {
     display: "flex",
@@ -564,10 +698,11 @@ function Catalog({ user }) {
     scrollbarWidth: "thin"
   };
 
-  const ContentCard = ({ item, size = "normal" }) => {
+  const ContentCard = ({ item, showProgress }) => {
     const poster = getPoster(item);
-    const w = size === "hero" ? 200 : size === "sm" ? 140 : 160;
-    const h = size === "hero" ? 280 : size === "sm" ? 200 : 230;
+    const progress = showProgress ? getSeriesProgress(item) : null;
+    const w = 160;
+    const h = 230;
     return (
       <div
         onClick={() => handleSelect(item)}
@@ -593,6 +728,7 @@ function Catalog({ user }) {
           e.currentTarget.style.borderColor = "#2a2a2a";
         }}
       >
+        <NewBadge item={item} />
         <button
           onClick={(e) => toggleFavorite(item.id, e)}
           style={{
@@ -633,11 +769,31 @@ function Catalog({ user }) {
             Sin portada
           </div>
         )}
-        {item.trailer && (
+        {progress && (
           <div
             style={{
               position: "absolute",
-              bottom: 48,
+              left: 0,
+              right: 0,
+              bottom: 52,
+              height: 4,
+              background: "rgba(0,0,0,0.5)"
+            }}
+          >
+            <div
+              style={{
+                height: "100%",
+                width: `${progress.pct}%`,
+                background: "#ff6b00"
+              }}
+            />
+          </div>
+        )}
+        {item.trailer && !progress && (
+          <div
+            style={{
+              position: "absolute",
+              bottom: 52,
               left: 8,
               background: "rgba(0,0,0,0.85)",
               color: "#ff6b00",
@@ -665,31 +821,31 @@ function Catalog({ user }) {
             {item.title}
           </h3>
           <p style={{ margin: "4px 0 0", fontSize: 11, color: "#888" }}>
-            {item.type === "movie" ? "Película" : "Serie"}
-            {item.year ? ` · ${item.year}` : ""}
+            {progress
+              ? progress.label
+              : `${item.type === "movie" ? "Película" : "Serie"}${
+                  item.year ? ` · ${item.year}` : ""
+                }`}
           </p>
         </div>
       </div>
     );
   };
 
-  const Lane = ({ title, items, color = "#fff" }) => {
+  const Lane = ({ title, items, color = "#fff", showProgress }) => {
     if (!items?.length) return null;
     return (
       <div style={{ marginBottom: 32 }}>
-        <h2
-          style={{
-            margin: "0 0 14px 0",
-            fontSize: 20,
-            fontWeight: 700,
-            color
-          }}
-        >
+        <h2 style={{ margin: "0 0 14px 0", fontSize: 20, fontWeight: 700, color }}>
           {title}
         </h2>
         <div style={rowScrollStyle}>
           {items.map((item) => (
-            <ContentCard key={`${title}-${item.id}`} item={item} />
+            <ContentCard
+              key={`${title}-${item.id}`}
+              item={item}
+              showProgress={showProgress}
+            />
           ))}
         </div>
       </div>
@@ -703,6 +859,7 @@ function Catalog({ user }) {
       ? currentEpisode?.link || currentEpisode?.driveLink
       : selected.driveLink;
     const embedUrl = getEmbedUrl(videoLink);
+    const directVideo = isDirectVideo(videoLink);
     const canPlay = isSubActive() && deviceAllowed;
 
     const bySeason = {};
@@ -761,22 +918,56 @@ function Catalog({ user }) {
           <h1 style={{ margin: 0, fontSize: 26, fontWeight: 700 }}>
             {selected.title}
             <StatusBadge item={selected} />
+            {isNewItem(selected) && (
+              <span
+                style={{
+                  marginLeft: 8,
+                  background: "#ff6b00",
+                  color: "#fff",
+                  fontSize: 12,
+                  padding: "3px 8px",
+                  borderRadius: 4,
+                  fontWeight: 800
+                }}
+              >
+                NUEVO
+              </span>
+            )}
           </h1>
-          <button
-            onClick={(e) => toggleFavorite(selected.id, e)}
-            style={{
-              padding: "10px 18px",
-              background: favorites[selected.id] ? "#c62828" : "#2a2a2a",
-              color: "#fff",
-              border: "none",
-              borderRadius: 8,
-              cursor: "pointer",
-              fontSize: 14
-            }}
-          >
-            {favorites[selected.id] ? "❤️ En favoritos" : "🤍 Agregar a favoritos"}
-          </button>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button
+              onClick={() => handleShare(selected)}
+              style={{
+                padding: "10px 18px",
+                background: "#1565c0",
+                color: "#fff",
+                border: "none",
+                borderRadius: 8,
+                cursor: "pointer",
+                fontSize: 14
+              }}
+            >
+              Compartir
+            </button>
+            <button
+              onClick={(e) => toggleFavorite(selected.id, e)}
+              style={{
+                padding: "10px 18px",
+                background: favorites[selected.id] ? "#c62828" : "#2a2a2a",
+                color: "#fff",
+                border: "none",
+                borderRadius: 8,
+                cursor: "pointer",
+                fontSize: 14
+              }}
+            >
+              {favorites[selected.id] ? "❤️ En favoritos" : "🤍 Agregar a favoritos"}
+            </button>
+          </div>
         </div>
+        {shareMsg && (
+          <p style={{ color: "#4CAF50", margin: "0 0 12px", fontSize: 14 }}>{shareMsg}</p>
+        )}
 
         {isSeries && currentEpisode && (
           <p style={{ color: "#ff9800", margin: "0 0 8px", fontWeight: 600 }}>
@@ -788,6 +979,7 @@ function Catalog({ user }) {
         <p style={{ color: "#aaa", margin: "0 0 8px", fontSize: 14 }}>
           {selected.type === "movie" ? "Película" : "Serie"}
           {selected.year && ` • ${selected.year}`}
+          {getDecade(selected.year) && ` • ${getDecade(selected.year)}`}
           {selected.genres?.length > 0 && ` • ${selected.genres.join(", ")}`}
         </p>
 
@@ -863,6 +1055,21 @@ function Catalog({ user }) {
                 Ver en Mega
               </a>
             </div>
+          ) : directVideo ? (
+            <div style={{ marginBottom: 28 }}>
+              <video
+                src={videoLink}
+                controls
+                playsInline
+                style={{
+                  width: "100%",
+                  maxHeight: "70vh",
+                  borderRadius: 12,
+                  background: "#000",
+                  border: "1px solid #333"
+                }}
+              />
+            </div>
           ) : embedUrl ? (
             <div style={{ marginBottom: 28 }}>
               <div
@@ -893,13 +1100,7 @@ function Catalog({ user }) {
               {isDailymotionLink(videoLink) && (
                 <p style={{ textAlign: "center", marginTop: 12 }}>
                   <a
-                    href={
-                      videoLink.includes("geo.dailymotion.com")
-                        ? `https://www.dailymotion.com/video/${
-                            videoLink.match(/video=([a-zA-Z0-9]+)/)?.[1] || ""
-                          }`
-                        : videoLink
-                    }
+                    href={videoLink}
                     target="_blank"
                     rel="noopener noreferrer"
                     style={{ color: "#00aaff", fontSize: 14 }}
@@ -1149,7 +1350,7 @@ function Catalog({ user }) {
     );
   }
 
-  // ========== HOME / CATÁLOGO ==========
+  // ========== HOME ==========
   return (
     <div
       style={{
@@ -1160,7 +1361,6 @@ function Catalog({ user }) {
         minHeight: "100vh"
       }}
     >
-      {/* HERO */}
       {showHomeLanes && heroItem && (
         <div
           style={{
@@ -1169,7 +1369,6 @@ function Catalog({ user }) {
             minHeight: 320,
             maxHeight: 420,
             marginBottom: 28,
-            borderRadius: 0,
             overflow: "hidden",
             background: "#111"
           }}
@@ -1185,7 +1384,8 @@ function Catalog({ user }) {
                 height: "100%",
                 objectFit: "cover",
                 opacity: 0.45,
-                filter: "blur(2px)"
+                filter: "blur(2px)",
+                transition: "opacity 0.6s"
               }}
             />
           )}
@@ -1220,6 +1420,8 @@ function Catalog({ user }) {
             >
               {recentHistory[0]?.id === heroItem.id
                 ? "CONTINUAR VIENDO"
+                : isNewItem(heroItem)
+                ? "NUEVO EN RETRO RECUERDOS"
                 : "DESTACADO"}
             </p>
             <h1
@@ -1287,13 +1489,48 @@ function Catalog({ user }) {
               >
                 {favorites[heroItem.id] ? "❤️ En favoritos" : "+ Mi lista"}
               </button>
+              <button
+                onClick={() => handleShare(heroItem)}
+                style={{
+                  padding: "12px 22px",
+                  background: "rgba(255,255,255,0.08)",
+                  color: "#fff",
+                  border: "1px solid #555",
+                  borderRadius: 8,
+                  fontWeight: 600,
+                  fontSize: 14,
+                  cursor: "pointer"
+                }}
+              >
+                Compartir
+              </button>
             </div>
+            {heroPool.length > 1 && (
+              <div style={{ display: "flex", gap: 6, marginTop: 16 }}>
+                {heroPool.slice(0, 6).map((_, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setHeroIndex(i)}
+                    style={{
+                      width: i === heroIndex % heroPool.length ? 20 : 8,
+                      height: 8,
+                      borderRadius: 4,
+                      border: "none",
+                      background:
+                        i === heroIndex % heroPool.length ? "#ff6b00" : "#555",
+                      cursor: "pointer",
+                      padding: 0,
+                      transition: "width 0.2s"
+                    }}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
 
       <div style={{ padding: "0 20px" }}>
-        {/* Buscador y filtros */}
         <div style={{ marginBottom: 24 }}>
           <input
             type="text"
@@ -1330,6 +1567,24 @@ function Catalog({ user }) {
                 }}
               >
                 {t === "all" ? "Todos" : t === "movie" ? "Películas" : "Series"}
+              </button>
+            ))}
+            {["all", "70s", "80s", "90s", "2000s"].map((d) => (
+              <button
+                key={d}
+                onClick={() => setFilterDecade(d)}
+                style={{
+                  padding: "9px 14px",
+                  borderRadius: 20,
+                  border: "none",
+                  cursor: "pointer",
+                  background: filterDecade === d ? "#9c27b0" : "#2a2a2a",
+                  color: "#fff",
+                  fontSize: 13,
+                  fontWeight: 600
+                }}
+              >
+                {d === "all" ? "Década" : d}
               </button>
             ))}
             <select
@@ -1377,7 +1632,11 @@ function Catalog({ user }) {
         ) : showHomeLanes ? (
           <>
             <Lane title="▶ Trailers" items={withTrailer} color="#ff6b00" />
-            <Lane title="Seguir viendo" items={recentHistory} />
+            <Lane
+              title="Seguir viendo"
+              items={recentHistory}
+              showProgress
+            />
             <Lane title="✨ Nuevos agregados" items={newest} color="#ff6b00" />
             <Lane title="Series" items={seriesOnly} />
             <Lane title="Películas" items={moviesOnly} />
@@ -1390,6 +1649,8 @@ function Catalog({ user }) {
                 ? "Mis favoritos"
                 : search
                 ? `Resultados de "${search}"`
+                : filterDecade !== "all"
+                ? `Década ${filterDecade}`
                 : filterType === "movie"
                 ? "Películas"
                 : filterType === "series"
