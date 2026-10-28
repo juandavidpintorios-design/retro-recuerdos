@@ -10,6 +10,7 @@ function Login({ onLoginSuccess }) {
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [showReset, setShowReset] = useState(false);
+  const [showPass, setShowPass] = useState(false);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -26,9 +27,7 @@ function Login({ onLoginSuccess }) {
         return;
       }
       const userData = userDoc.data();
-      await updateDoc(doc(db, "users", user.uid), {
-        lastLogin: serverTimestamp()
-      });
+      await updateDoc(doc(db, "users", user.uid), { lastLogin: serverTimestamp() });
       if (userData.status === "pending") {
         setError("Tu cuenta está pendiente de activación. Espera a que el administrador la active.");
         setLoading(false);
@@ -45,12 +44,18 @@ function Login({ onLoginSuccess }) {
           email: user.email,
           displayName: userData.displayName,
           role: userData.role,
-          status: userData.status
+          status: userData.status,
+          subscriptionPlan: userData.subscriptionPlan || null,
+          subscriptionExpiresAt: userData.subscriptionExpiresAt || null
         });
       }
     } catch (err) {
       console.error(err);
-      if (err.code === "auth/user-not-found" || err.code === "auth/wrong-password" || err.code === "auth/invalid-credential") {
+      if (
+        err.code === "auth/user-not-found" ||
+        err.code === "auth/wrong-password" ||
+        err.code === "auth/invalid-credential"
+      ) {
         setError("Correo o contraseña incorrectos.");
       } else {
         setError("Error al iniciar sesión. Intenta de nuevo.");
@@ -66,269 +71,340 @@ function Login({ onLoginSuccess }) {
     setLoading(true);
     try {
       await sendPasswordResetEmail(auth, email);
-      setMessage("Se ha enviado un correo para restablecer tu contraseña. Revisa tu bandeja de entrada.");
+      setMessage("Se ha enviado un correo para restablecer tu contraseña.");
     } catch (err) {
       console.error(err);
-      if (err.code === "auth/user-not-found") {
-        setError("No existe una cuenta con ese correo.");
-      } else if (err.code === "auth/invalid-email") {
-        setError("El correo no es válido.");
-      } else {
-        setError("Error al enviar el correo. Intenta de nuevo.");
-      }
+      if (err.code === "auth/user-not-found") setError("No existe una cuenta con ese correo.");
+      else if (err.code === "auth/invalid-email") setError("El correo no es válido.");
+      else setError("Error al enviar el correo. Intenta de nuevo.");
     }
     setLoading(false);
   };
 
-  // ========== ESTILOS ==========
-  const styles = {
-    page: {
-      minHeight: "100vh",
-      background: "radial-gradient(ellipse at center, #1a0a2e 0%, #0d0221 50%, #000000 100%)",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      position: "relative",
-      overflow: "hidden",
-      fontFamily: "'Segoe UI', system-ui, sans-serif",
-      padding: "20px",
-    },
-    logoImg: {
-      position: "absolute",
-      opacity: 0.85,
-      filter: "drop-shadow(0 0 12px rgba(255, 107, 0, 0.5))",
-      zIndex: 1,
-      pointerEvents: "none",
-      objectFit: "contain",
-    },
-    card: {
-      background: "linear-gradient(145deg, #1e1e2f, #12121f)",
-      border: "3px solid #ff6b00",
-      borderRadius: "16px",
-      padding: "40px 36px",
-      width: "100%",
-      maxWidth: "420px",
-      zIndex: 10,
-      boxShadow: "0 0 30px rgba(255, 107, 0, 0.4), 0 0 60px rgba(255, 50, 0, 0.2)",
-      textAlign: "center",
-      position: "relative",
-    },
-    logo: {
-      fontSize: "2.3rem",
-      fontWeight: 900,
-      background: "linear-gradient(90deg, #ff6b00, #ffcc00, #ff6b00)",
-      WebkitBackgroundClip: "text",
-      WebkitTextFillColor: "transparent",
-      margin: "0 0 6px 0",
-      letterSpacing: "1px",
-      textTransform: "uppercase",
-    },
-    slogan: {
-      color: "#ffcc00",
-      fontSize: "0.95rem",
-      marginBottom: "22px",
-      fontWeight: 600,
-    },
-    title: {
-      color: "#ffffff",
-      fontSize: "1.45rem",
-      marginBottom: "26px",
-      textShadow: "0 0 10px rgba(255, 107, 0, 0.5)",
-    },
-    inputGroup: {
-      marginBottom: "16px",
-      textAlign: "left",
-    },
-    label: {
-      display: "block",
-      color: "#ffaa55",
-      fontSize: "0.9rem",
-      marginBottom: "6px",
-      fontWeight: 600,
-    },
-    input: {
-      width: "100%",
-      padding: "12px 14px",
-      border: "2px solid #ff6b00",
-      borderRadius: "8px",
-      background: "#0d0d1a",
-      color: "white",
-      fontSize: "1rem",
-      outline: "none",
-      boxSizing: "border-box",
-    },
-    button: {
-      width: "100%",
-      padding: "14px",
-      marginTop: "10px",
-      background: "linear-gradient(90deg, #ff6b00, #ff3300)",
-      border: "none",
-      borderRadius: "10px",
-      color: "white",
-      fontSize: "1.05rem",
-      fontWeight: 800,
-      cursor: "pointer",
-      textTransform: "uppercase",
-      letterSpacing: "1px",
-      boxShadow: "0 4px 15px rgba(255, 80, 0, 0.5)",
-    },
-    linkBtn: {
-      background: "none",
-      border: "none",
-      color: "#ffaa55",
-      cursor: "pointer",
-      fontWeight: 600,
-      fontSize: "0.95rem",
-    },
-    error: {
-      color: "#ff5555",
-      margin: "10px 0",
-      fontWeight: 600,
-    },
-    success: {
-      color: "#55ff88",
-      margin: "10px 0",
-      fontWeight: 600,
-    },
+  const page = {
+    minHeight: "100vh",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 16,
+    background: `
+      radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.75) 100%),
+      repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,120,0,0.03) 2px, rgba(255,120,0,0.03) 4px),
+      radial-gradient(ellipse at center, #2a1030 0%, #0d0221 55%, #000 100%)
+    `,
+    fontFamily: "system-ui, Segoe UI, sans-serif",
+    position: "relative",
+    overflow: "hidden"
   };
 
-  // ========== PANTALLA DE RESTABLECER CONTRASEÑA ==========
-  if (showReset) {
-    return (
-      <div style={styles.page}>
-        {/* Logos en las 4 esquinas */}
-        <img src="/heroes/thundercats-logo.png" alt="Thundercats" style={{ ...styles.logoImg, top: "4%", left: "3%", maxWidth: "min(160px, 18vw)" }} />
-        <img src="/heroes/heman-logo.png" alt="He-Man" style={{ ...styles.logoImg, top: "4%", right: "3%", maxWidth: "min(150px, 17vw)" }} />
-        <img src="/heroes/batman-logo.png" alt="Batman" style={{ ...styles.logoImg, bottom: "4%", left: "3%", maxWidth: "min(140px, 16vw)" }} />
-        <img src="/heroes/superman-logo.png" alt="Superman" style={{ ...styles.logoImg, bottom: "4%", right: "3%", maxWidth: "min(150px, 17vw)" }} />
+  const bezel = {
+    width: "100%",
+    maxWidth: 520,
+    background: "linear-gradient(160deg, #2a2a2e 0%, #1a1a1c 40%, #0e0e10 100%)",
+    borderRadius: 28,
+    padding: "18px 18px 28px",
+    boxShadow:
+      "0 0 0 4px #111, 0 0 0 8px #333, 0 25px 60px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.08)",
+    position: "relative"
+  };
 
-        <div style={styles.card}>
-          <h1 style={styles.logo}>retro-recuerdos</h1>
-          <p style={styles.slogan}>¡Recupera el poder de tu cuenta!</p>
-          <h2 style={styles.title}>Restablecer contraseña</h2>
-          <p style={{ color: "#ccc", marginBottom: "20px", fontSize: "0.95rem" }}>
-            Ingresa tu correo y te enviaremos un enlace para cambiar la contraseña.
-          </p>
+  const screen = {
+    background: "radial-gradient(ellipse at center, #1a0a28 0%, #0a0418 70%, #050208 100%)",
+    borderRadius: 16,
+    padding: "28px 22px 22px",
+    border: "3px solid #ff6b00",
+    boxShadow: "inset 0 0 40px rgba(255,100,0,0.15), 0 0 30px rgba(255,107,0,0.35)",
+    position: "relative",
+    overflow: "hidden"
+  };
 
-          <form onSubmit={handleResetPassword}>
-            <div style={styles.inputGroup}>
-              <label style={styles.label}>Correo electrónico</label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                style={styles.input}
-                placeholder="tu@email.com"
-              />
-            </div>
+  const scan = {
+    pointerEvents: "none",
+    position: "absolute",
+    inset: 0,
+    background:
+      "repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(0,0,0,0.12) 3px, rgba(0,0,0,0.12) 4px)",
+    zIndex: 2
+  };
 
-            {error && <p style={styles.error}>{error}</p>}
-            {message && <p style={styles.success}>{message}</p>}
+  const title = {
+    margin: "0 0 6px",
+    textAlign: "center",
+    fontSize: "clamp(1.6rem, 6vw, 2.2rem)",
+    fontWeight: 900,
+    letterSpacing: 2,
+    color: "#ff8c00",
+    textShadow: "0 0 8px #ff6b00, 0 0 20px #ff6b00, 0 0 40px rgba(255,100,0,0.5)",
+    textTransform: "uppercase",
+    position: "relative",
+    zIndex: 3
+  };
 
-            <button type="submit" disabled={loading} style={styles.button}>
-              {loading ? "Enviando..." : "Enviar enlace"}
-            </button>
-          </form>
+  const inputStyle = {
+    width: "100%",
+    padding: "12px 14px",
+    borderRadius: 10,
+    border: "2px solid #ff6b00",
+    background: "rgba(0,0,0,0.45)",
+    color: "#fff",
+    fontSize: 15,
+    outline: "none",
+    boxSizing: "border-box"
+  };
 
-          <p style={{ marginTop: "20px" }}>
-            <button onClick={() => setShowReset(false)} style={styles.linkBtn}>
-              ← Volver al inicio de sesión
-            </button>
-          </p>
+  const logos = [
+    { src: "/heroes/thundercats-logo.png", alt: "Thundercats" },
+    { src: "/heroes/heman-logo.png", alt: "He-Man" },
+    { src: "/heroes/batman-logo.png", alt: "Batman" },
+    { src: "/heroes/superman-logo.png", alt: "Superman" }
+  ];
+
+  const FormBox = ({ children }) => (
+    <div
+      style={{
+        border: "2px solid #ff6b00",
+        borderRadius: 14,
+        padding: "18px 16px",
+        background: "rgba(0,0,0,0.35)",
+        position: "relative",
+        zIndex: 3,
+        boxShadow: "0 0 20px rgba(255,107,0,0.2)"
+      }}
+    >
+      {children}
+    </div>
+  );
+
+  const body = showReset ? (
+    <FormBox>
+      <p
+        style={{
+          margin: "0 0 14px",
+          textAlign: "center",
+          color: "#ffcc00",
+          fontSize: 12,
+          letterSpacing: 1,
+          fontWeight: 700
+        }}
+      >
+        RESTABLECER CONTRASEÑA
+      </p>
+      <form onSubmit={handleResetPassword}>
+        <input
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+          placeholder="Correo electrónico"
+          style={{ ...inputStyle, marginBottom: 12 }}
+        />
+        {error && <p style={{ color: "#ff5555", fontSize: 13 }}>{error}</p>}
+        {message && <p style={{ color: "#55ff88", fontSize: 13 }}>{message}</p>}
+        <button
+          type="submit"
+          disabled={loading}
+          style={{
+            width: "100%",
+            padding: "12px",
+            border: "none",
+            borderRadius: 10,
+            background: "linear-gradient(180deg, #ff8c00, #e65100)",
+            color: "#fff",
+            fontWeight: 800,
+            fontSize: 15,
+            cursor: "pointer",
+            letterSpacing: 1
+          }}
+        >
+          {loading ? "Enviando..." : "ENVIAR ENLACE"}
+        </button>
+      </form>
+      <button
+        type="button"
+        onClick={() => {
+          setShowReset(false);
+          setError("");
+          setMessage("");
+        }}
+        style={{
+          marginTop: 14,
+          background: "none",
+          border: "none",
+          color: "#ffaa55",
+          cursor: "pointer",
+          width: "100%",
+          fontSize: 13
+        }}
+      >
+        ← Volver al inicio de sesión
+      </button>
+    </FormBox>
+  ) : (
+    <FormBox>
+      <p
+        style={{
+          margin: "0 0 14px",
+          textAlign: "center",
+          color: "#ffcc00",
+          fontSize: 11,
+          letterSpacing: 1.5,
+          fontWeight: 700
+        }}
+      >
+        INICIA SESIÓN PARA CONTINUAR
+      </p>
+      <form onSubmit={handleLogin}>
+        <div style={{ marginBottom: 12 }}>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            placeholder="Usuario / Correo"
+            style={inputStyle}
+          />
         </div>
-      </div>
-    );
-  }
+        <div style={{ marginBottom: 12, position: "relative" }}>
+          <input
+            type={showPass ? "text" : "password"}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            placeholder="Contraseña"
+            style={{ ...inputStyle, paddingRight: 44 }}
+          />
+          <button
+            type="button"
+            onClick={() => setShowPass((v) => !v)}
+            style={{
+              position: "absolute",
+              right: 10,
+              top: "50%",
+              transform: "translateY(-50%)",
+              background: "none",
+              border: "none",
+              color: "#ffaa55",
+              cursor: "pointer",
+              fontSize: 16
+            }}
+          >
+            {showPass ? "🙈" : "👁"}
+          </button>
+        </div>
+        {error && <p style={{ color: "#ff5555", fontSize: 13 }}>{error}</p>}
+        {message && <p style={{ color: "#55ff88", fontSize: 13 }}>{message}</p>}
+        <button
+          type="submit"
+          disabled={loading}
+          style={{
+            width: "100%",
+            padding: "14px",
+            border: "none",
+            borderRadius: 12,
+            background: "linear-gradient(180deg, #ff9f1a, #e65100)",
+            color: "#fff",
+            fontWeight: 900,
+            fontSize: 16,
+            cursor: "pointer",
+            letterSpacing: 2,
+            boxShadow: "0 4px 20px rgba(255,100,0,0.45)",
+            textTransform: "uppercase"
+          }}
+        >
+          {loading ? "Entrando..." : "ENTRAR"}
+        </button>
+      </form>
+      <p style={{ margin: "14px 0 0", textAlign: "center" }}>
+        <button
+          type="button"
+          onClick={() => setShowReset(true)}
+          style={{
+            background: "none",
+            border: "none",
+            color: "#ffaa55",
+            cursor: "pointer",
+            fontSize: 13
+          }}
+        >
+          ¿Olvidaste tu contraseña?
+        </button>
+      </p>
+    </FormBox>
+  );
 
-  // ========== PANTALLA NORMAL DE LOGIN ==========
   return (
-    <div style={styles.page}>
-      {/* Logos en las 4 esquinas */}
-      <img 
-        src="/heroes/thundercats-logo.png" 
-        alt="Thundercats" 
-        style={{ 
-          ...styles.logoImg, 
-          top: "3%", 
-          left: "2%", 
-          maxWidth: "min(170px, 19vw)" 
-        }} 
-      />
-      <img 
-        src="/heroes/heman-logo.png" 
-        alt="He-Man" 
-        style={{ 
-          ...styles.logoImg, 
-          top: "3%", 
-          right: "2%", 
-          maxWidth: "min(160px, 18vw)" 
-        }} 
-      />
-      <img 
-        src="/heroes/batman-logo.png" 
-        alt="Batman" 
-        style={{ 
-          ...styles.logoImg, 
-          bottom: "3%", 
-          left: "2%", 
-          maxWidth: "min(150px, 17vw)" 
-        }} 
-      />
-      <img 
-        src="/heroes/superman-logo.png" 
-        alt="Superman" 
-        style={{ 
-          ...styles.logoImg, 
-          bottom: "3%", 
-          right: "2%", 
-          maxWidth: "min(160px, 18vw)" 
-        }} 
-      />
-
-      <div style={styles.card}>
-        <h1 style={styles.logo}>retro-recuerdos</h1>
-        <p style={styles.slogan}>¡Recupera el poder de tus sábados por la mañana!</p>
-        <h2 style={styles.title}>¡Bienvenido, Héroe!</h2>
-
-        <form onSubmit={handleLogin}>
-          <div style={styles.inputGroup}>
-            <label style={styles.label}>Correo electrónico</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              style={styles.input}
-              placeholder="tu@email.com"
-            />
+    <div style={page}>
+      <div style={bezel}>
+        <div style={screen}>
+          <div style={scan} />
+          <h1 style={title}>RETRO-RECUERDOS</h1>
+          <p
+            style={{
+              textAlign: "center",
+              color: "#ffcc00",
+              margin: "0 0 18px",
+              fontSize: 14,
+              position: "relative",
+              zIndex: 3,
+              textShadow: "0 0 8px rgba(255,200,0,0.4)"
+            }}
+          >
+            ¡Bienvenido, Héroe!
+          </p>
+          {body}
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+              gap: 16,
+              marginTop: 22,
+              flexWrap: "wrap",
+              position: "relative",
+              zIndex: 3
+            }}
+          >
+            {logos.map((l) => (
+              <img
+                key={l.alt}
+                src={l.src}
+                alt={l.alt}
+                style={{
+                  height: 36,
+                  maxWidth: 90,
+                  objectFit: "contain",
+                  filter: "drop-shadow(0 0 6px rgba(255,140,0,0.5))"
+                }}
+              />
+            ))}
           </div>
-
-          <div style={styles.inputGroup}>
-            <label style={styles.label}>Contraseña</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              style={styles.input}
-              placeholder="••••••••"
+        </div>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            padding: "10px 8px 0",
+            color: "#666",
+            fontSize: 10,
+            letterSpacing: 1
+          }}
+        >
+          <span>
+            <span
+              style={{
+                display: "inline-block",
+                width: 8,
+                height: 8,
+                borderRadius: "50%",
+                background: "#c62828",
+                marginRight: 6,
+                boxShadow: "0 0 6px #f44336"
+              }}
             />
-          </div>
-
-          {error && <p style={styles.error}>{error}</p>}
-          {message && <p style={styles.success}>{message}</p>}
-
-          <button type="submit" disabled={loading} style={styles.button}>
-            {loading ? "Entrando..." : "¡ENTRAR AL UNIVERSO RETRO!"}
-          </button>
-        </form>
-
-        <p style={{ marginTop: "18px" }}>
-          <button onClick={() => setShowReset(true)} style={styles.linkBtn}>
-            ¿Olvidaste tu contraseña?
-          </button>
-        </p>
+            POWER
+          </span>
+          <span>VOLUME</span>
+        </div>
       </div>
     </div>
   );
