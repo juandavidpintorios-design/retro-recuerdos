@@ -23,7 +23,6 @@ function Catalog({ user }) {
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState("all");
   const [filterYear, setFilterYear] = useState("all");
-  const [filterDecade, setFilterDecade] = useState("all");
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const [ratings, setRatings] = useState({});
   const [favorites, setFavorites] = useState({});
@@ -78,17 +77,6 @@ function Catalog({ user }) {
     } catch {
       return false;
     }
-  };
-
-  const getDecade = (year) => {
-    const y = Number(year);
-    if (!y) return null;
-    if (y >= 1970 && y <= 1979) return "70s";
-    if (y >= 1980 && y <= 1989) return "80s";
-    if (y >= 1990 && y <= 1999) return "90s";
-    if (y >= 2000 && y <= 2009) return "2000s";
-    if (y >= 2010) return "2010+";
-    return null;
   };
 
   const checkDeviceLimit = async () => {
@@ -165,8 +153,7 @@ function Catalog({ user }) {
           const count = itemRatings.length;
           const average =
             count > 0
-              ? itemRatings.reduce((s, r) => s + Number(r.rating || 0), 0) /
-                count
+              ? itemRatings.reduce((s, r) => s + Number(r.rating || 0), 0) / count
               : 0;
           const userR = itemRatings.find((r) => r.userId === user.uid);
           ratingsData[contentId] = {
@@ -503,28 +490,8 @@ function Catalog({ user }) {
     );
   };
 
-  const NewBadge = ({ item }) => {
-    if (!isNewItem(item)) return null;
-    return (
-      <span
-        style={{
-          position: "absolute",
-          top: 8,
-          left: 8,
-          background: "#ff6b00",
-          color: "#fff",
-          fontSize: 10,
-          fontWeight: 800,
-          padding: "3px 8px",
-          borderRadius: 4,
-          zIndex: 2,
-          letterSpacing: 0.5
-        }}
-      >
-        NUEVO
-      </span>
-    );
-  };
+  const isSeriesFinished = (item) =>
+    item?.seriesStatus === "finished" || item?.seriesStatus === "finalizada";
 
   const TrailerPlayer = ({ trailerUrl }) => {
     if (!trailerUrl || !String(trailerUrl).trim()) return null;
@@ -638,9 +605,7 @@ function Catalog({ user }) {
 
     await addToHistory(
       item.id,
-      item.type === "series"
-        ? getHistoryFor(item.id)?.episodeNumber || null
-        : null
+      item.type === "series" ? getHistoryFor(item.id)?.episodeNumber || null : null
     );
 
     try {
@@ -674,25 +639,20 @@ function Catalog({ user }) {
     }
   };
 
-  const years = [
-    ...new Set(contents.map((c) => c.year).filter(Boolean))
-  ].sort((a, b) => b - a);
+  const years = [...new Set(contents.map((c) => c.year).filter(Boolean))].sort(
+    (a, b) => b - a
+  );
 
   const filtered = contents.filter((item) => {
     if (showFavoritesOnly && !favorites[item.id]) return false;
     if (filterType !== "all" && item.type !== filterType) return false;
-    if (filterYear !== "all" && String(item.year) !== String(filterYear))
-      return false;
-    if (filterDecade !== "all" && getDecade(item.year) !== filterDecade)
-      return false;
+    if (filterYear !== "all" && String(item.year) !== String(filterYear)) return false;
     if (search.trim()) {
       const q = search.toLowerCase().trim();
       const inTitle = (item.title || "").toLowerCase().includes(q);
       const inArtists = Array.isArray(item.artists)
         ? item.artists.some((a) => String(a).toLowerCase().includes(q))
-        : String(item.artists || "")
-            .toLowerCase()
-            .includes(q);
+        : String(item.artists || "").toLowerCase().includes(q);
       if (!inTitle && !inArtists) return false;
     }
     return true;
@@ -711,14 +671,11 @@ function Catalog({ user }) {
     .filter(Boolean)
     .slice(0, 12);
 
-  const withTrailer = contents.filter(
-    (c) => c.trailer && String(c.trailer).trim()
-  );
+  const withTrailer = contents.filter((c) => c.trailer && String(c.trailer).trim());
   const seriesOnly = contents.filter((c) => c.type === "series");
   const moviesOnly = contents.filter((c) => c.type === "movie");
   const newest = contents.slice(0, 12);
 
-  // Hero pool (sin useMemo para evitar bugs al volver)
   const heroPool = (() => {
     const pool = [];
     const seen = new Set();
@@ -735,8 +692,7 @@ function Catalog({ user }) {
     return pool;
   })();
 
-  const safeHeroIndex =
-    heroPool.length > 0 ? heroIndex % heroPool.length : 0;
+  const safeHeroIndex = heroPool.length > 0 ? heroIndex % heroPool.length : 0;
   const heroItem = heroPool[safeHeroIndex] || null;
 
   useEffect(() => {
@@ -749,11 +705,7 @@ function Catalog({ user }) {
   }, [selected, heroPool.length]);
 
   const showHomeLanes =
-    !search &&
-    !showFavoritesOnly &&
-    filterType === "all" &&
-    filterYear === "all" &&
-    filterDecade === "all";
+    !search && !showFavoritesOnly && filterType === "all" && filterYear === "all";
 
   const rowScrollStyle = {
     display: "flex",
@@ -768,35 +720,73 @@ function Catalog({ user }) {
     if (!item) return null;
     const poster = getPoster(item);
     const progress = showProgress ? getSeriesProgress(item) : null;
-    const w = 160;
-    const h = 230;
+    const w = 168;
+    const h = 240;
+    const hasStatus = item.type === "series" && item.seriesStatus;
+    const leftOffset = (isNewItem(item) ? 64 : 8) + (hasStatus && isNewItem(item) ? 0 : 0);
+
     return (
       <div
         onClick={() => handleSelect(item)}
         style={{
           cursor: "pointer",
-          borderRadius: "12px",
+          borderRadius: "10px",
           overflow: "hidden",
-          backgroundColor: "#1a1a1a",
+          backgroundColor: "#141414",
           position: "relative",
           transition: "transform 0.2s, box-shadow 0.2s",
           border: "1px solid #2a2a2a",
           flex: `0 0 ${w}px`,
-          width: w
+          width: w,
+          boxShadow: "0 4px 14px rgba(0,0,0,0.4)"
         }}
         onMouseEnter={(e) => {
           e.currentTarget.style.transform = "scale(1.05)";
-          e.currentTarget.style.boxShadow =
-            "0 10px 28px rgba(255, 107, 0, 0.3)";
+          e.currentTarget.style.boxShadow = "0 10px 28px rgba(255, 107, 0, 0.35)";
           e.currentTarget.style.borderColor = "#ff6b00";
         }}
         onMouseLeave={(e) => {
           e.currentTarget.style.transform = "scale(1)";
-          e.currentTarget.style.boxShadow = "none";
+          e.currentTarget.style.boxShadow = "0 4px 14px rgba(0,0,0,0.4)";
           e.currentTarget.style.borderColor = "#2a2a2a";
         }}
       >
-        <NewBadge item={item} />
+        {isNewItem(item) && (
+          <span
+            style={{
+              position: "absolute",
+              top: 8,
+              left: 8,
+              background: "#ff6b00",
+              color: "#fff",
+              fontSize: 10,
+              fontWeight: 800,
+              padding: "3px 7px",
+              borderRadius: 4,
+              zIndex: 2
+            }}
+          >
+            NUEVO
+          </span>
+        )}
+        {hasStatus && (
+          <span
+            style={{
+              position: "absolute",
+              top: 8,
+              left: isNewItem(item) ? 72 : 8,
+              zIndex: 2,
+              fontSize: 9,
+              fontWeight: 800,
+              padding: "3px 6px",
+              borderRadius: 4,
+              background: isSeriesFinished(item) ? "#2e7d32" : "#e65100",
+              color: "#fff"
+            }}
+          >
+            {isSeriesFinished(item) ? "FINALIZADA" : "AÑADIÉNDOSE"}
+          </span>
+        )}
         <button
           onClick={(e) => toggleFavorite(item.id, e)}
           style={{
@@ -815,71 +805,75 @@ function Catalog({ user }) {
         >
           {favorites[item.id] ? "❤️" : "🤍"}
         </button>
-        {poster ? (
-          <img
-            src={poster}
-            alt={item.title || ""}
-            style={{
-              width: "100%",
-              height: h,
-              objectFit: "cover",
-              display: "block"
-            }}
-          />
-        ) : (
-          <div
-            style={{
-              width: "100%",
-              height: h,
-              background: "linear-gradient(135deg,#2a2a2a,#111)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              color: "#666",
-              fontSize: 13
-            }}
-          >
-            Sin portada
-          </div>
-        )}
-        {progress && (
-          <div
-            style={{
-              position: "absolute",
-              left: 0,
-              right: 0,
-              bottom: 52,
-              height: 4,
-              background: "rgba(0,0,0,0.5)"
-            }}
-          >
-            <div
+
+        <div style={{ position: "relative" }}>
+          {poster ? (
+            <img
+              src={poster}
+              alt={item.title || ""}
               style={{
-                height: "100%",
-                width: `${progress.pct}%`,
-                background: "#ff6b00"
+                width: "100%",
+                height: h,
+                objectFit: "cover",
+                display: "block"
               }}
             />
-          </div>
-        )}
-        {item.trailer && !progress && (
-          <div
-            style={{
-              position: "absolute",
-              bottom: 52,
-              left: 8,
-              background: "rgba(0,0,0,0.85)",
-              color: "#ff6b00",
-              fontSize: 10,
-              padding: "2px 7px",
-              borderRadius: 4,
-              fontWeight: 700
-            }}
-          >
-            ▶ Trailer
-          </div>
-        )}
-        <div style={{ padding: "10px" }}>
+          ) : (
+            <div
+              style={{
+                width: "100%",
+                height: h,
+                background: "linear-gradient(135deg,#2a2a2a,#111)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "#666",
+                fontSize: 13
+              }}
+            >
+              Sin portada
+            </div>
+          )}
+          {progress && (
+            <div
+              style={{
+                position: "absolute",
+                left: 0,
+                right: 0,
+                bottom: 0,
+                height: 4,
+                background: "rgba(0,0,0,0.55)"
+              }}
+            >
+              <div
+                style={{
+                  height: "100%",
+                  width: `${progress.pct}%`,
+                  background: "#ff6b00"
+                }}
+              />
+            </div>
+          )}
+          {item.trailer && !progress && (
+            <div
+              style={{
+                position: "absolute",
+                bottom: 8,
+                left: 8,
+                background: "rgba(0,0,0,0.85)",
+                color: "#ff6b00",
+                fontSize: 10,
+                padding: "2px 7px",
+                borderRadius: 4,
+                fontWeight: 700
+              }}
+            >
+              ▶ Trailer
+            </div>
+          )}
+        </div>
+
+        <div style={{ padding: "10px 10px 12px" }}>
           <h3
             style={{
               margin: 0,
@@ -893,7 +887,7 @@ function Catalog({ user }) {
           >
             {item.title}
           </h3>
-          <p style={{ margin: "4px 0 0", fontSize: 11, color: "#888" }}>
+          <p style={{ margin: "4px 0 0", fontSize: 11, color: "#999" }}>
             {progress
               ? progress.label
               : `${item.type === "movie" ? "Película" : "Serie"}${
@@ -908,15 +902,27 @@ function Catalog({ user }) {
   const Lane = ({ title, items, color = "#fff", showProgress }) => {
     if (!items?.length) return null;
     return (
-      <div style={{ marginBottom: 32 }}>
+      <div style={{ marginBottom: 36 }}>
         <h2
           style={{
             margin: "0 0 14px 0",
             fontSize: 20,
             fontWeight: 700,
-            color
+            color,
+            display: "flex",
+            alignItems: "center",
+            gap: 10
           }}
         >
+          <span
+            style={{
+              width: 4,
+              height: 20,
+              background: "#ff6b00",
+              borderRadius: 2,
+              display: "inline-block"
+            }}
+          />
           {title}
         </h2>
         <div style={rowScrollStyle}>
@@ -968,7 +974,7 @@ function Catalog({ user }) {
           margin: "0 auto",
           color: "#fff",
           minHeight: "100vh",
-          background: "#111"
+          background: "#0a0a0a"
         }}
       >
         <button
@@ -1043,22 +1049,17 @@ function Catalog({ user }) {
                 fontSize: 14
               }}
             >
-              {favorites[selected.id]
-                ? "❤️ En favoritos"
-                : "🤍 Agregar a favoritos"}
+              {favorites[selected.id] ? "❤️ En favoritos" : "🤍 Agregar a favoritos"}
             </button>
           </div>
         </div>
         {shareMsg && (
-          <p style={{ color: "#4CAF50", margin: "0 0 12px", fontSize: 14 }}>
-            {shareMsg}
-          </p>
+          <p style={{ color: "#4CAF50", margin: "0 0 12px", fontSize: 14 }}>{shareMsg}</p>
         )}
 
         {isSeries && currentEpisode && (
           <p style={{ color: "#ff9800", margin: "0 0 8px", fontWeight: 600 }}>
-            Temporada {currentEpisode.season || 1} · Episodio{" "}
-            {currentEpisode.number}
+            Temporada {currentEpisode.season || 1} · Episodio {currentEpisode.number}
             {currentEpisode.title ? `: ${currentEpisode.title}` : ""}
           </p>
         )}
@@ -1066,7 +1067,6 @@ function Catalog({ user }) {
         <p style={{ color: "#aaa", margin: "0 0 8px", fontSize: 14 }}>
           {selected.type === "movie" ? "Película" : "Serie"}
           {selected.year && ` • ${selected.year}`}
-          {getDecade(selected.year) && ` • ${getDecade(selected.year)}`}
           {selected.genres?.length > 0 && ` • ${selected.genres.join(", ")}`}
         </p>
 
@@ -1080,21 +1080,12 @@ function Catalog({ user }) {
         )}
 
         <div style={{ marginBottom: 20 }}>
-          <p style={{ margin: "0 0 6px", fontSize: 14, color: "#ccc" }}>
-            Tu calificación:
-          </p>
+          <p style={{ margin: "0 0 6px", fontSize: 14, color: "#ccc" }}>Tu calificación:</p>
           <Stars contentId={selected.id} size={28} interactive />
         </div>
 
         {selected.description && (
-          <p
-            style={{
-              marginBottom: 24,
-              color: "#ccc",
-              lineHeight: 1.6,
-              fontSize: 15
-            }}
-          >
+          <p style={{ marginBottom: 24, color: "#ccc", lineHeight: 1.6, fontSize: 15 }}>
             {selected.description}
           </p>
         )}
@@ -1113,9 +1104,7 @@ function Catalog({ user }) {
             }}
           >
             <h3 style={{ color: "#ff9800", marginTop: 0 }}>
-              {!isSubActive()
-                ? "Suscripción vencida"
-                : "Límite de dispositivos"}
+              {!isSubActive() ? "Suscripción vencida" : "Límite de dispositivos"}
             </h3>
             <p style={{ color: "#ccc" }}>
               {!isSubActive()
@@ -1314,11 +1303,7 @@ function Catalog({ user }) {
                         key={`${seasonNum}-${num}-${ep._index}`}
                         onClick={() => {
                           if (!canPlay) return;
-                          setCurrentEpisode({
-                            ...ep,
-                            number: num,
-                            season: seasonNum
-                          });
+                          setCurrentEpisode({ ...ep, number: num, season: seasonNum });
                           addToHistory(selected.id, num);
                         }}
                         style={{
@@ -1330,9 +1315,7 @@ function Catalog({ user }) {
                           borderRadius: 10,
                           cursor: canPlay ? "pointer" : "not-allowed",
                           opacity: canPlay ? 1 : 0.6,
-                          border: active
-                            ? "2px solid #ff6b00"
-                            : "1px solid #333"
+                          border: active ? "2px solid #ff6b00" : "1px solid #333"
                         }}
                       >
                         <div
@@ -1374,13 +1357,7 @@ function Catalog({ user }) {
           </div>
         )}
 
-        <div
-          style={{
-            marginTop: 10,
-            borderTop: "1px solid #333",
-            paddingTop: 24
-          }}
-        >
+        <div style={{ marginTop: 10, borderTop: "1px solid #333", paddingTop: 24 }}>
           <h2 style={{ margin: "0 0 16px", fontSize: 20 }}>
             Comentarios ({comments.length})
           </h2>
@@ -1449,14 +1426,7 @@ function Catalog({ user }) {
                         : ""}
                     </span>
                   </div>
-                  <p
-                    style={{
-                      margin: 0,
-                      fontSize: 14,
-                      color: "#ccc",
-                      lineHeight: 1.5
-                    }}
-                  >
+                  <p style={{ margin: 0, fontSize: 14, color: "#ccc", lineHeight: 1.5 }}>
                     {c.text}
                   </p>
                 </div>
@@ -1473,347 +1443,348 @@ function Catalog({ user }) {
     <div
       key="catalog-home"
       style={{
-        padding: "0 0 40px",
+        position: "relative",
+        padding: "0 0 48px",
         maxWidth: 1400,
         margin: "0 auto",
         color: "#fff",
         minHeight: "100vh",
-        background: "#111"
+        background:
+          "radial-gradient(ellipse at top, #1a1208 0%, #0a0a0a 45%, #000 100%)"
       }}
     >
-      {showHomeLanes && heroItem && (
-        <div
-          style={{
-            position: "relative",
-            width: "100%",
-            minHeight: 320,
-            maxHeight: 420,
-            marginBottom: 28,
-            overflow: "hidden",
-            background: "#111"
-          }}
-        >
-          {getPoster(heroItem) && (
-            <img
-              src={getPoster(heroItem)}
-              alt=""
-              style={{
-                position: "absolute",
-                inset: 0,
-                width: "100%",
-                height: "100%",
-                objectFit: "cover",
-                opacity: 0.45,
-                filter: "blur(2px)"
-              }}
-            />
-          )}
-          <div
-            style={{
-              position: "absolute",
-              inset: 0,
-              background:
-                "linear-gradient(90deg, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.55) 50%, rgba(0,0,0,0.3) 100%)"
-            }}
-          />
+      <div
+        aria-hidden
+        style={{
+          position: "fixed",
+          inset: 0,
+          pointerEvents: "none",
+          zIndex: 0,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          opacity: 0.04,
+          fontSize: "clamp(36px, 10vw, 100px)",
+          fontWeight: 900,
+          letterSpacing: 6,
+          color: "#ff6b00",
+          transform: "rotate(-12deg)",
+          userSelect: "none"
+        }}
+      >
+        RETRO RECUERDOS
+      </div>
+
+      <div style={{ position: "relative", zIndex: 1 }}>
+        {showHomeLanes && heroItem && (
           <div
             style={{
               position: "relative",
-              zIndex: 1,
-              padding: "40px 24px",
-              maxWidth: 700,
-              display: "flex",
-              flexDirection: "column",
-              justifyContent: "flex-end",
-              minHeight: 320
+              width: "100%",
+              minHeight: 320,
+              maxHeight: 420,
+              marginBottom: 28,
+              overflow: "hidden",
+              background: "#111"
             }}
           >
-            <p
+            {getPoster(heroItem) && (
+              <img
+                src={getPoster(heroItem)}
+                alt=""
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  width: "100%",
+                  height: "100%",
+                  objectFit: "cover",
+                  opacity: 0.45,
+                  filter: "blur(2px)"
+                }}
+              />
+            )}
+            <div
               style={{
-                margin: "0 0 8px",
-                color: "#ff6b00",
-                fontWeight: 700,
-                fontSize: 13,
-                letterSpacing: 1
+                position: "absolute",
+                inset: 0,
+                background:
+                  "linear-gradient(90deg, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.55) 50%, rgba(0,0,0,0.3) 100%)"
+              }}
+            />
+            <div
+              style={{
+                position: "relative",
+                zIndex: 1,
+                padding: "40px 24px",
+                maxWidth: 700,
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: "flex-end",
+                minHeight: 320
               }}
             >
-              {recentHistory[0]?.id === heroItem.id
-                ? "CONTINUAR VIENDO"
-                : isNewItem(heroItem)
-                ? "NUEVO EN RETRO RECUERDOS"
-                : "DESTACADO"}
-            </p>
-            <h1
-              style={{
-                margin: "0 0 12px",
-                fontSize: "clamp(24px, 5vw, 40px)",
-                fontWeight: 800,
-                lineHeight: 1.15
-              }}
-            >
-              {heroItem.title}
-            </h1>
-            <p style={{ margin: "0 0 8px", color: "#ccc", fontSize: 14 }}>
-              {heroItem.type === "movie" ? "Película" : "Serie"}
-              {heroItem.year ? ` · ${heroItem.year}` : ""}
-              {heroItem.episodes?.length
-                ? ` · ${heroItem.episodes.length} episodios`
-                : ""}
-            </p>
-            {heroItem.description && (
               <p
                 style={{
-                  margin: "0 0 20px",
-                  color: "#bbb",
-                  fontSize: 14,
-                  lineHeight: 1.5,
-                  maxWidth: 520,
-                  display: "-webkit-box",
-                  WebkitLineClamp: 3,
-                  WebkitBoxOrient: "vertical",
-                  overflow: "hidden"
-                }}
-              >
-                {heroItem.description}
-              </p>
-            )}
-            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-              <button
-                onClick={() => handleSelect(heroItem)}
-                style={{
-                  padding: "12px 28px",
-                  background: "#ff6b00",
-                  color: "#fff",
-                  border: "none",
-                  borderRadius: 8,
+                  margin: "0 0 8px",
+                  color: "#ff6b00",
                   fontWeight: 700,
-                  fontSize: 15,
-                  cursor: "pointer"
+                  fontSize: 13,
+                  letterSpacing: 1
                 }}
               >
-                ▶ Reproducir
-              </button>
-              <button
-                onClick={(e) => toggleFavorite(heroItem.id, e)}
+                {recentHistory[0]?.id === heroItem.id
+                  ? "CONTINUAR VIENDO"
+                  : isNewItem(heroItem)
+                  ? "NUEVO EN RETRO RECUERDOS"
+                  : "DESTACADO"}
+              </p>
+              <h1
                 style={{
-                  padding: "12px 22px",
-                  background: "rgba(255,255,255,0.12)",
-                  color: "#fff",
-                  border: "1px solid #555",
-                  borderRadius: 8,
-                  fontWeight: 600,
-                  fontSize: 14,
-                  cursor: "pointer"
+                  margin: "0 0 12px",
+                  fontSize: "clamp(24px, 5vw, 40px)",
+                  fontWeight: 800,
+                  lineHeight: 1.15
                 }}
               >
-                {favorites[heroItem.id] ? "❤️ En favoritos" : "+ Mi lista"}
-              </button>
-              <button
-                onClick={() => handleShare(heroItem)}
-                style={{
-                  padding: "12px 22px",
-                  background: "rgba(255,255,255,0.08)",
-                  color: "#fff",
-                  border: "1px solid #555",
-                  borderRadius: 8,
-                  fontWeight: 600,
-                  fontSize: 14,
-                  cursor: "pointer"
-                }}
-              >
-                Compartir
-              </button>
-            </div>
-            {heroPool.length > 1 && (
-              <div style={{ display: "flex", gap: 6, marginTop: 16 }}>
-                {heroPool.slice(0, 6).map((_, i) => (
-                  <button
-                    key={i}
-                    type="button"
-                    onClick={() => setHeroIndex(i)}
-                    style={{
-                      width: i === safeHeroIndex ? 20 : 8,
-                      height: 8,
-                      borderRadius: 4,
-                      border: "none",
-                      background: i === safeHeroIndex ? "#ff6b00" : "#555",
-                      cursor: "pointer",
-                      padding: 0
-                    }}
-                  />
-                ))}
+                {heroItem.title}
+              </h1>
+              <p style={{ margin: "0 0 8px", color: "#ccc", fontSize: 14 }}>
+                {heroItem.type === "movie" ? "Película" : "Serie"}
+                {heroItem.year ? ` · ${heroItem.year}` : ""}
+                {heroItem.episodes?.length
+                  ? ` · ${heroItem.episodes.length} episodios`
+                  : ""}
+              </p>
+              {heroItem.description && (
+                <p
+                  style={{
+                    margin: "0 0 20px",
+                    color: "#bbb",
+                    fontSize: 14,
+                    lineHeight: 1.5,
+                    maxWidth: 520,
+                    display: "-webkit-box",
+                    WebkitLineClamp: 3,
+                    WebkitBoxOrient: "vertical",
+                    overflow: "hidden"
+                  }}
+                >
+                  {heroItem.description}
+                </p>
+              )}
+              <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                <button
+                  onClick={() => handleSelect(heroItem)}
+                  style={{
+                    padding: "12px 28px",
+                    background: "#ff6b00",
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: 8,
+                    fontWeight: 700,
+                    fontSize: 15,
+                    cursor: "pointer"
+                  }}
+                >
+                  ▶ Reproducir
+                </button>
+                <button
+                  onClick={(e) => toggleFavorite(heroItem.id, e)}
+                  style={{
+                    padding: "12px 22px",
+                    background: "rgba(255,255,255,0.12)",
+                    color: "#fff",
+                    border: "1px solid #555",
+                    borderRadius: 8,
+                    fontWeight: 600,
+                    fontSize: 14,
+                    cursor: "pointer"
+                  }}
+                >
+                  {favorites[heroItem.id] ? "❤️ En favoritos" : "+ Mi lista"}
+                </button>
+                <button
+                  onClick={() => handleShare(heroItem)}
+                  style={{
+                    padding: "12px 22px",
+                    background: "rgba(255,255,255,0.08)",
+                    color: "#fff",
+                    border: "1px solid #555",
+                    borderRadius: 8,
+                    fontWeight: 600,
+                    fontSize: 14,
+                    cursor: "pointer"
+                  }}
+                >
+                  Compartir
+                </button>
               </div>
-            )}
+              {heroPool.length > 1 && (
+                <div style={{ display: "flex", gap: 6, marginTop: 16 }}>
+                  {heroPool.slice(0, 6).map((_, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => setHeroIndex(i)}
+                      style={{
+                        width: i === safeHeroIndex ? 20 : 8,
+                        height: 8,
+                        borderRadius: 4,
+                        border: "none",
+                        background: i === safeHeroIndex ? "#ff6b00" : "#555",
+                        cursor: "pointer",
+                        padding: 0
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      <div style={{ padding: "0 20px" }}>
-        <div style={{ marginBottom: 24 }}>
-          <input
-            type="text"
-            placeholder="Buscar por título o artista..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            style={{
-              width: "100%",
-              padding: "14px 18px",
-              borderRadius: 12,
-              border: "1px solid #333",
-              background: "#1a1a1a",
-              color: "#fff",
-              fontSize: 16,
-              marginBottom: 12,
-              boxSizing: "border-box",
-              outline: "none"
-            }}
-          />
-          <div
-            style={{
-              display: "flex",
-              flexWrap: "wrap",
-              gap: 10,
-              alignItems: "center"
-            }}
-          >
-            {["all", "movie", "series"].map((t) => (
+        <div style={{ padding: "0 20px" }}>
+          <div style={{ marginBottom: 24 }}>
+            <input
+              type="text"
+              placeholder="Buscar por título o artista..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              style={{
+                width: "100%",
+                padding: "14px 18px",
+                borderRadius: 12,
+                border: "1px solid #333",
+                background: "#1a1a1a",
+                color: "#fff",
+                fontSize: 16,
+                marginBottom: 12,
+                boxSizing: "border-box",
+                outline: "none"
+              }}
+            />
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 10,
+                alignItems: "center"
+              }}
+            >
+              {["all", "movie", "series"].map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setFilterType(t)}
+                  style={{
+                    padding: "9px 18px",
+                    borderRadius: 20,
+                    border: "none",
+                    cursor: "pointer",
+                    background: filterType === t ? "#ff6b00" : "#2a2a2a",
+                    color: "#fff",
+                    fontSize: 14,
+                    fontWeight: 600
+                  }}
+                >
+                  {t === "all" ? "Todos" : t === "movie" ? "Películas" : "Series"}
+                </button>
+              ))}
+              <select
+                value={filterYear}
+                onChange={(e) => setFilterYear(e.target.value)}
+                style={{
+                  padding: "9px 16px",
+                  borderRadius: 20,
+                  border: "1px solid #444",
+                  background: "#2a2a2a",
+                  color: "#fff",
+                  fontSize: 14,
+                  cursor: "pointer"
+                }}
+              >
+                <option value="all">Todos los años</option>
+                {years.map((y) => (
+                  <option key={y} value={y}>
+                    {y}
+                  </option>
+                ))}
+              </select>
               <button
-                key={t}
                 type="button"
-                onClick={() => setFilterType(t)}
+                onClick={() => setShowFavoritesOnly(!showFavoritesOnly)}
                 style={{
                   padding: "9px 18px",
                   borderRadius: 20,
                   border: "none",
                   cursor: "pointer",
-                  background: filterType === t ? "#ff6b00" : "#2a2a2a",
+                  background: showFavoritesOnly ? "#c62828" : "#2a2a2a",
                   color: "#fff",
                   fontSize: 14,
                   fontWeight: 600
                 }}
               >
-                {t === "all" ? "Todos" : t === "movie" ? "Películas" : "Series"}
+                {showFavoritesOnly ? "❤️ Favoritos" : "🤍 Favoritos"}
               </button>
-            ))}
-            {["all", "70s", "80s", "90s", "2000s"].map((d) => (
-              <button
-                key={d}
-                type="button"
-                onClick={() => setFilterDecade(d)}
-                style={{
-                  padding: "9px 14px",
-                  borderRadius: 20,
-                  border: "none",
-                  cursor: "pointer",
-                  background: filterDecade === d ? "#9c27b0" : "#2a2a2a",
-                  color: "#fff",
-                  fontSize: 13,
-                  fontWeight: 600
-                }}
-              >
-                {d === "all" ? "Década" : d}
-              </button>
-            ))}
-            <select
-              value={filterYear}
-              onChange={(e) => setFilterYear(e.target.value)}
-              style={{
-                padding: "9px 16px",
-                borderRadius: 20,
-                border: "1px solid #444",
-                background: "#2a2a2a",
-                color: "#fff",
-                fontSize: 14,
-                cursor: "pointer"
-              }}
-            >
-              <option value="all">Todos los años</option>
-              {years.map((y) => (
-                <option key={y} value={y}>
-                  {y}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              onClick={() => setShowFavoritesOnly(!showFavoritesOnly)}
-              style={{
-                padding: "9px 18px",
-                borderRadius: 20,
-                border: "none",
-                cursor: "pointer",
-                background: showFavoritesOnly ? "#c62828" : "#2a2a2a",
-                color: "#fff",
-                fontSize: 14,
-                fontWeight: 600
-              }}
-            >
-              {showFavoritesOnly ? "❤️ Favoritos" : "🤍 Favoritos"}
-            </button>
+            </div>
           </div>
-        </div>
 
-        {loading ? (
-          <p style={{ textAlign: "center", color: "#888", marginTop: 60 }}>
-            Cargando contenido...
-          </p>
-        ) : showHomeLanes ? (
-          <>
-            <Lane title="▶ Trailers" items={withTrailer} color="#ff6b00" />
-            <Lane
-              title="Seguir viendo"
-              items={recentHistory}
-              showProgress
-            />
-            <Lane title="✨ Nuevos agregados" items={newest} color="#ff6b00" />
-            <Lane title="Series" items={seriesOnly} />
-            <Lane title="Películas" items={moviesOnly} />
-            <Lane title="Destacados" items={featured} />
-            {contents.length === 0 && (
-              <p style={{ color: "#888", textAlign: "center", marginTop: 40 }}>
-                Aún no hay contenido en el catálogo
-              </p>
-            )}
-          </>
-        ) : (
-          <>
-            <h2 style={{ margin: "0 0 16px", fontSize: 22, fontWeight: 700 }}>
-              {showFavoritesOnly
-                ? "Mis favoritos"
-                : search
-                ? `Resultados de "${search}"`
-                : filterDecade !== "all"
-                ? `Década ${filterDecade}`
-                : filterType === "movie"
-                ? "Películas"
-                : filterType === "series"
-                ? "Series"
-                : "Catálogo"}{" "}
-              <span style={{ color: "#888", fontSize: 16, fontWeight: 400 }}>
-                ({filtered.length})
-              </span>
-            </h2>
-            {filtered.length === 0 ? (
-              <p style={{ color: "#888", textAlign: "center", marginTop: 40 }}>
-                No se encontró contenido
-              </p>
-            ) : (
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
-                  gap: 16
-                }}
-              >
-                {filtered.map((item) => (
-                  <div key={item.id} style={{ minWidth: 0 }}>
-                    <ContentCard item={item} />
-                  </div>
-                ))}
-              </div>
-            )}
-          </>
-        )}
+          {loading ? (
+            <p style={{ textAlign: "center", color: "#888", marginTop: 60 }}>
+              Cargando contenido...
+            </p>
+          ) : showHomeLanes ? (
+            <>
+              <Lane title="▶ Trailers" items={withTrailer} color="#ff6b00" />
+              <Lane title="Seguir viendo" items={recentHistory} showProgress />
+              <Lane title="✨ Nuevos agregados" items={newest} color="#ff6b00" />
+              <Lane title="Series" items={seriesOnly} />
+              <Lane title="Películas" items={moviesOnly} />
+              <Lane title="Destacados" items={featured} />
+              {contents.length === 0 && (
+                <p style={{ color: "#888", textAlign: "center", marginTop: 40 }}>
+                  Aún no hay contenido en el catálogo
+                </p>
+              )}
+            </>
+          ) : (
+            <>
+              <h2 style={{ margin: "0 0 16px", fontSize: 22, fontWeight: 700 }}>
+                {showFavoritesOnly
+                  ? "Mis favoritos"
+                  : search
+                  ? `Resultados de "${search}"`
+                  : filterType === "movie"
+                  ? "Películas"
+                  : filterType === "series"
+                  ? "Series"
+                  : "Catálogo"}{" "}
+                <span style={{ color: "#888", fontSize: 16, fontWeight: 400 }}>
+                  ({filtered.length})
+                </span>
+              </h2>
+              {filtered.length === 0 ? (
+                <p style={{ color: "#888", textAlign: "center", marginTop: 40 }}>
+                  No se encontró contenido
+                </p>
+              ) : (
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
+                    gap: 16
+                  }}
+                >
+                  {filtered.map((item) => (
+                    <div key={item.id} style={{ minWidth: 0 }}>
+                      <ContentCard item={item} />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
