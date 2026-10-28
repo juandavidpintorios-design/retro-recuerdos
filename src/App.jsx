@@ -17,7 +17,7 @@ function App() {
   const [showRegister, setShowRegister] = useState(false);
   const [adminView, setAdminView] = useState(null);
   const [page, setPage] = useState("catalog");
-  const [maintenance, setMaintenance] = useState(null); // Date o null
+  const [maintenance, setMaintenance] = useState(null);
   const [checkingUpdate, setCheckingUpdate] = useState(true);
   const [countdown, setCountdown] = useState({ m: 0, s: 0, total: 0, pct: 100 });
   const [theme, setTheme] = useState(
@@ -26,6 +26,7 @@ function App() {
 
   const isAdmin = user?.role === "admin";
   const isEditor = user?.role === "editor" || isAdmin;
+  const isHeroe = theme === "heroe";
 
   const toggleTheme = () => {
     const next = theme === "villano" ? "heroe" : "villano";
@@ -33,15 +34,26 @@ function App() {
     localStorage.setItem("retro_theme", next);
   };
 
-  const isHeroe = theme === "heroe";
-  const colors = {
-    bg: isHeroe ? "#f5f0e8" : "#111",
-    header: isHeroe ? "#e8e0d4" : "#1a1a1a",
-    text: isHeroe ? "#1a1a1a" : "#fff",
-    muted: isHeroe ? "#555" : "#aaa",
-    border: isHeroe ? "#d0c8b8" : "#333",
-    accent: "#ff6b00"
-  };
+  // Villano = CRT oscuro | Héroe = sepia TV antigua
+  const colors = isHeroe
+    ? {
+        bg: "#f3ead8",
+        header: "#e8dcc8",
+        text: "#2a2010",
+        muted: "#6a5a40",
+        border: "#c4b498",
+        accent: "#c45c00",
+        btnIdle: "#ddd0b8"
+      }
+    : {
+        bg: "#0a0a0a",
+        header: "rgba(12, 18, 12, 0.96)",
+        text: "#e8ffe8",
+        muted: "#7aaa7a",
+        border: "#2a4a2a",
+        accent: "#ff6b00",
+        btnIdle: "#1a2a1a"
+      };
 
   const getDaysLeft = () => {
     if (!user?.subscriptionExpiresAt) return null;
@@ -54,7 +66,7 @@ function App() {
   const daysLeft = getDaysLeft();
   const showSubWarning = daysLeft !== null && daysLeft >= 0 && daysLeft <= 7;
 
-  // Mantenimiento / versión (tiempo real)
+  // Mantenimiento / versión
   useEffect(() => {
     const unsub = onSnapshot(
       doc(db, "settings", "app"),
@@ -104,30 +116,24 @@ function App() {
     return () => unsub();
   }, []);
 
-  // Cuenta regresiva cada segundo
+  // Cuenta regresiva
   useEffect(() => {
     if (!maintenance) return;
-
-    const TOTAL_MS = 4 * 60 * 1000; // referencia visual de 4 min
-
+    const TOTAL_MS = 4 * 60 * 1000;
     const tick = () => {
       const left = Math.max(0, maintenance.getTime() - Date.now());
       const m = Math.floor(left / 60000);
       const s = Math.floor((left % 60000) / 1000);
       const pct = Math.min(100, Math.round((left / TOTAL_MS) * 100));
       setCountdown({ m, s, total: left, pct });
-
-      if (left <= 0) {
-        setMaintenance(null);
-      }
+      if (left <= 0) setMaintenance(null);
     };
-
     tick();
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
   }, [maintenance]);
 
-  // Auth inicial
+  // Auth
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
@@ -214,7 +220,7 @@ function App() {
     setUser(updatedUser);
   };
 
-  // ========== PANTALLA DE ACTUALIZACIÓN ==========
+  // ========== ACTUALIZACIÓN ==========
   if (maintenance && countdown.total > 0) {
     const mm = String(countdown.m).padStart(2, "0");
     const ss = String(countdown.s).padStart(2, "0");
@@ -244,7 +250,6 @@ function App() {
             boxShadow: "0 0 40px rgba(255,107,0,0.25)"
           }}
         >
-          {/* Cambia el nombre si tu archivo no es goku.gif */}
           <img
             src="/goku.gif"
             alt="Actualizando..."
@@ -259,7 +264,6 @@ function App() {
               boxShadow: "0 0 24px rgba(255, 200, 0, 0.3)"
             }}
           />
-
           <h1
             style={{
               margin: "0 0 8px",
@@ -270,7 +274,6 @@ function App() {
           >
             ¡Poder al máximo!
           </h1>
-
           <p
             style={{
               margin: "0 0 20px",
@@ -283,7 +286,6 @@ function App() {
             <br />
             El acceso se reabre cuando el contador llegue a cero.
           </p>
-
           <div
             style={{
               fontSize: 52,
@@ -299,7 +301,6 @@ function App() {
           <p style={{ margin: "0 0 16px", color: "#888", fontSize: 13 }}>
             minutos restantes
           </p>
-
           <div
             style={{
               height: 10,
@@ -319,7 +320,6 @@ function App() {
               }}
             />
           </div>
-
           <p style={{ margin: 0, color: "#aaa", fontSize: 13 }}>
             Luego inicia sesión otra vez para continuar.
           </p>
@@ -335,7 +335,7 @@ function App() {
           textAlign: "center",
           marginTop: "100px",
           color: "white",
-          backgroundColor: "#111",
+          backgroundColor: "#0a0a0a",
           minHeight: "100vh"
         }}
       >
@@ -344,15 +344,16 @@ function App() {
     );
   }
 
-  // ========== PANEL ADMIN / EDITOR ==========
+  // ========== ADMIN / EDITOR ==========
   if (user && isEditor && adminView) {
     const view = isAdmin ? adminView : "content";
     return (
-      <div style={{ minHeight: "100vh", backgroundColor: "#111", color: "white" }}>
+      <div style={{ minHeight: "100vh", backgroundColor: "#0a0a0a", color: "white" }}>
         <div
           style={{
             padding: "12px 20px",
-            backgroundColor: "#1a1a1a",
+            backgroundColor: "#121812",
+            borderBottom: "1px solid #2a4a2a",
             display: "flex",
             justifyContent: "space-between",
             alignItems: "center",
@@ -360,8 +361,8 @@ function App() {
             gap: "10px"
           }}
         >
-          <h2 style={{ margin: 0 }}>
-            Retro Recuerdos - {isAdmin ? "Admin" : "Editor"}
+          <h2 style={{ margin: 0, color: "#ff6b00" }}>
+            Retro Recuerdos — {isAdmin ? "Admin" : "Editor"}
           </h2>
           <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
             {isAdmin && (
@@ -369,10 +370,10 @@ function App() {
                 onClick={() => setAdminView("users")}
                 style={{
                   padding: "8px 16px",
-                  backgroundColor: view === "users" ? "#2196F3" : "#444",
+                  backgroundColor: view === "users" ? "#2196F3" : "#333",
                   color: "white",
                   border: "none",
-                  borderRadius: "4px",
+                  borderRadius: "6px",
                   cursor: "pointer"
                 }}
               >
@@ -383,10 +384,10 @@ function App() {
               onClick={() => setAdminView("content")}
               style={{
                 padding: "8px 16px",
-                backgroundColor: view === "content" ? "#4CAF50" : "#444",
+                backgroundColor: view === "content" ? "#4CAF50" : "#333",
                 color: "white",
                 border: "none",
-                borderRadius: "4px",
+                borderRadius: "6px",
                 cursor: "pointer"
               }}
             >
@@ -394,7 +395,14 @@ function App() {
             </button>
             <button
               onClick={() => setAdminView(null)}
-              style={{ padding: "8px 16px", cursor: "pointer" }}
+              style={{
+                padding: "8px 16px",
+                cursor: "pointer",
+                background: "#2a2a2a",
+                color: "#fff",
+                border: "1px solid #444",
+                borderRadius: 6
+              }}
             >
               Volver al catálogo
             </button>
@@ -405,7 +413,7 @@ function App() {
                 backgroundColor: "#f44336",
                 color: "white",
                 border: "none",
-                borderRadius: "4px",
+                borderRadius: "6px",
                 cursor: "pointer"
               }}
             >
@@ -425,170 +433,223 @@ function App() {
       <div
         style={{
           minHeight: "100vh",
-          backgroundColor: colors.bg,
-          color: colors.text
+          background: isHeroe
+            ? colors.bg
+            : `
+              radial-gradient(ellipse at top, #1a1208 0%, #0a0a0a 50%, #000 100%)
+            `,
+          color: colors.text,
+          position: "relative"
         }}
       >
-        {showSubWarning && (
+        {!isHeroe && (
           <div
+            aria-hidden
             style={{
-              background: daysLeft <= 2 ? "#c62828" : "#e65100",
-              color: "#fff",
-              padding: "10px 16px",
-              textAlign: "center",
-              fontSize: "14px",
-              fontWeight: 600
+              pointerEvents: "none",
+              position: "fixed",
+              inset: 0,
+              background:
+                "repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(0,255,80,0.015) 3px, rgba(0,255,80,0.015) 4px)",
+              zIndex: 0
             }}
-          >
-            {daysLeft === 0
-              ? "⚠️ Tu suscripción vence hoy. Renueva para no perder el acceso."
-              : `⚠️ Tu suscripción vence en ${daysLeft} día${
-                  daysLeft === 1 ? "" : "s"
-                }. Contacta al administrador para renovar.`}
-          </div>
+          />
         )}
-        <div
-          style={{
-            padding: "12px 20px",
-            backgroundColor: colors.header,
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            flexWrap: "wrap",
-            gap: "10px",
-            borderBottom: `1px solid ${colors.border}`
-          }}
-        >
-          <h2
-            style={{ margin: 0, cursor: "pointer", color: colors.accent }}
-            onClick={() => setPage("catalog")}
-          >
-            Retro Recuerdos
-          </h2>
+
+        <div style={{ position: "relative", zIndex: 1 }}>
+          {showSubWarning && (
+            <div
+              style={{
+                background: daysLeft <= 2 ? "#c62828" : "#e65100",
+                color: "#fff",
+                padding: "10px 16px",
+                textAlign: "center",
+                fontSize: "14px",
+                fontWeight: 600
+              }}
+            >
+              {daysLeft === 0
+                ? "⚠️ Tu suscripción vence hoy. Renueva para no perder el acceso."
+                : `⚠️ Tu suscripción vence en ${daysLeft} día${
+                    daysLeft === 1 ? "" : "s"
+                  }. Contacta al administrador para renovar.`}
+            </div>
+          )}
+
           <div
             style={{
+              padding: "12px 20px",
+              backgroundColor: colors.header,
               display: "flex",
-              gap: "8px",
+              justifyContent: "space-between",
               alignItems: "center",
-              flexWrap: "wrap"
+              flexWrap: "wrap",
+              gap: "10px",
+              borderBottom: `1px solid ${colors.border}`,
+              boxShadow: isHeroe ? "none" : "0 2px 20px rgba(255,107,0,0.08)"
             }}
           >
-            {[
-              { id: "catalog", label: "Catálogo" },
-              { id: "profile", label: "Mi Perfil" },
-              { id: "requests", label: "Solicitar" },
-              { id: "about", label: "Acerca de" }
-            ].map((p) => (
-              <button
-                key={p.id}
-                onClick={() => setPage(p.id)}
-                style={{
-                  padding: "7px 14px",
-                  backgroundColor:
-                    page === p.id ? colors.accent : isHeroe ? "#ddd" : "#333",
-                  color: page === p.id || !isHeroe ? "#fff" : "#222",
-                  border: "none",
-                  borderRadius: "4px",
-                  cursor: "pointer",
-                  fontSize: "13px"
-                }}
-              >
-                {p.label}
-              </button>
-            ))}
-            <button
-              onClick={toggleTheme}
+            <h2
               style={{
-                padding: "7px 14px",
-                backgroundColor: isHeroe ? "#333" : "#ffcc00",
-                color: isHeroe ? "#fff" : "#111",
-                border: "none",
-                borderRadius: "4px",
+                margin: 0,
                 cursor: "pointer",
-                fontSize: "13px",
-                fontWeight: 700
+                color: colors.accent,
+                fontWeight: 800,
+                letterSpacing: 0.5,
+                textShadow: isHeroe ? "none" : "0 0 12px rgba(255,107,0,0.4)"
+              }}
+              onClick={() => setPage("catalog")}
+            >
+              RETRO RECUERDOS
+            </h2>
+
+            <div
+              style={{
+                display: "flex",
+                gap: "8px",
+                alignItems: "center",
+                flexWrap: "wrap"
               }}
             >
-              {isHeroe ? "😈 Villano" : "🦸 Héroe"}
-            </button>
-            {isAdmin && (
+              {[
+                { id: "catalog", label: "Catálogo" },
+                { id: "profile", label: "Mi Perfil" },
+                { id: "requests", label: "Solicitar" },
+                { id: "about", label: "Acerca de" }
+              ].map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => setPage(p.id)}
+                  style={{
+                    padding: "7px 14px",
+                    backgroundColor:
+                      page === p.id ? colors.accent : colors.btnIdle,
+                    color: page === p.id || !isHeroe ? "#fff" : "#222",
+                    border: "none",
+                    borderRadius: "6px",
+                    cursor: "pointer",
+                    fontSize: "13px",
+                    fontWeight: page === p.id ? 700 : 500
+                  }}
+                >
+                  {p.label}
+                </button>
+              ))}
+
               <button
-                onClick={() => setAdminView("users")}
+                onClick={toggleTheme}
                 style={{
                   padding: "7px 14px",
-                  backgroundColor: "#2196F3",
+                  backgroundColor: isHeroe ? "#333" : "#ffcc00",
+                  color: isHeroe ? "#fff" : "#111",
+                  border: "none",
+                  borderRadius: "6px",
+                  cursor: "pointer",
+                  fontSize: "13px",
+                  fontWeight: 700
+                }}
+              >
+                {isHeroe ? "😈 Villano" : "🦸 Héroe"}
+              </button>
+
+              {isAdmin && (
+                <button
+                  onClick={() => setAdminView("users")}
+                  style={{
+                    padding: "7px 14px",
+                    backgroundColor: "#2196F3",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "6px",
+                    cursor: "pointer",
+                    fontSize: "13px"
+                  }}
+                >
+                  Usuarios
+                </button>
+              )}
+
+              {isEditor && (
+                <button
+                  onClick={() => setAdminView("content")}
+                  style={{
+                    padding: "7px 14px",
+                    backgroundColor: "#4CAF50",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "6px",
+                    cursor: "pointer",
+                    fontSize: "13px"
+                  }}
+                >
+                  Contenido
+                </button>
+              )}
+
+              <span style={{ fontSize: "13px", color: colors.muted }}>
+                Hola, {user.displayName}
+                {user.role === "editor" && " (Editor)"}
+                {user.role === "admin" && " (Admin)"}
+              </span>
+
+              <button
+                onClick={handleLogout}
+                style={{
+                  padding: "7px 14px",
+                  backgroundColor: "#f44336",
                   color: "white",
                   border: "none",
-                  borderRadius: "4px",
+                  borderRadius: "6px",
                   cursor: "pointer",
                   fontSize: "13px"
                 }}
               >
-                Usuarios
+                Cerrar sesión
               </button>
-            )}
-            {isEditor && (
-              <button
-                onClick={() => setAdminView("content")}
-                style={{
-                  padding: "7px 14px",
-                  backgroundColor: "#4CAF50",
-                  color: "white",
-                  border: "none",
-                  borderRadius: "4px",
-                  cursor: "pointer",
-                  fontSize: "13px"
-                }}
-              >
-                Contenido
-              </button>
-            )}
-            <span style={{ fontSize: "13px", color: colors.muted }}>
-              Hola, {user.displayName}
-              {user.role === "editor" && " (Editor)"}
-              {user.role === "admin" && " (Admin)"}
-            </span>
-            <button
-              onClick={handleLogout}
-              style={{
-                padding: "7px 14px",
-                backgroundColor: "#f44336",
-                color: "white",
-                border: "none",
-                borderRadius: "4px",
-                cursor: "pointer",
-                fontSize: "13px"
-              }}
-            >
-              Cerrar sesión
-            </button>
+            </div>
           </div>
+
+          {page === "catalog" && <Catalog user={user} />}
+          {page === "profile" && (
+            <Profile user={user} onUserUpdate={handleUserUpdate} />
+          )}
+          {page === "requests" && <Requests user={user} />}
+          {page === "about" && <About />}
         </div>
-        {page === "catalog" && <Catalog user={user} />}
-        {page === "profile" && (
-          <Profile user={user} onUserUpdate={handleUserUpdate} />
-        )}
-        {page === "requests" && <Requests user={user} />}
-        {page === "about" && <About />}
       </div>
     );
   }
 
   // ========== NO LOGUEADO ==========
   return (
-    <div style={{ minHeight: "100vh", backgroundColor: "#111", color: "white" }}>
+    <div
+      style={{
+        minHeight: "100vh",
+        backgroundColor: "#0a0a0a",
+        color: "white"
+      }}
+    >
       {showRegister ? (
         <>
           <Register />
-          <p style={{ textAlign: "center" }}>
+          <p
+            style={{
+              textAlign: "center",
+              marginTop: -40,
+              position: "relative",
+              zIndex: 5,
+              paddingBottom: 24
+            }}
+          >
             ¿Ya tienes cuenta?{" "}
             <button
               onClick={() => setShowRegister(false)}
               style={{
                 background: "none",
                 border: "none",
-                color: "#64b5f6",
-                cursor: "pointer"
+                color: "#ffaa55",
+                cursor: "pointer",
+                fontWeight: 700
               }}
             >
               Inicia sesión
@@ -598,15 +659,24 @@ function App() {
       ) : (
         <>
           <Login onLoginSuccess={handleLoginSuccess} />
-          <p style={{ textAlign: "center" }}>
+          <p
+            style={{
+              textAlign: "center",
+              marginTop: -8,
+              position: "relative",
+              zIndex: 5,
+              paddingBottom: 24
+            }}
+          >
             ¿No tienes cuenta?{" "}
             <button
               onClick={() => setShowRegister(true)}
               style={{
                 background: "none",
                 border: "none",
-                color: "#64b5f6",
-                cursor: "pointer"
+                color: "#ffaa55",
+                cursor: "pointer",
+                fontWeight: 700
               }}
             >
               Regístrate
