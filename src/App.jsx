@@ -11,6 +11,65 @@ import Profile from "./pages/Profile";
 import About from "./pages/About";
 import Requests from "./pages/Requests";
 
+const FESTIVE = {
+  none: {
+    label: null,
+    emoji: null,
+    accent: "#ff6b00",
+    bannerBg: null,
+    bannerText: null,
+    glow: "rgba(255,107,0,0.4)"
+  },
+  halloween: {
+    label: "Halloween",
+    emoji: "🎃",
+    accent: "#ff6d00",
+    bannerBg: "linear-gradient(90deg, #1a0a00, #3e1f00, #1a0a00)",
+    bannerText: "🎃 ¡Feliz Halloween en Retro Recuerdos! 👻",
+    glow: "rgba(255,109,0,0.5)"
+  },
+  christmas: {
+    label: "Navidad",
+    emoji: "🎄",
+    accent: "#c62828",
+    bannerBg: "linear-gradient(90deg, #1b5e20, #b71c1c, #1b5e20)",
+    bannerText: "🎄 ¡Feliz Navidad! Disfruta tus recuerdos favoritos ❄️",
+    glow: "rgba(198,40,40,0.45)"
+  },
+  newyear: {
+    label: "Año Nuevo",
+    emoji: "✨",
+    accent: "#f9a825",
+    bannerBg: "linear-gradient(90deg, #1a237e, #4a148c, #1a237e)",
+    bannerText: "✨ ¡Feliz Año Nuevo! Que el nuevo año traiga más clásicos 🥂",
+    glow: "rgba(249,168,37,0.5)"
+  },
+  valentine: {
+    label: "San Valentín",
+    emoji: "💕",
+    accent: "#e91e63",
+    bannerBg: "linear-gradient(90deg, #880e4f, #c2185b, #880e4f)",
+    bannerText: "💕 Amor y Amistad — ideal para ver juntos ❤️",
+    glow: "rgba(233,30,99,0.45)"
+  },
+  easter: {
+    label: "Pascua",
+    emoji: "🐣",
+    accent: "#7e57c2",
+    bannerBg: "linear-gradient(90deg, #4a148c, #6a1b9a, #4a148c)",
+    bannerText: "🐣 Feliz Pascua / Semana Santa en Retro Recuerdos",
+    glow: "rgba(126,87,194,0.45)"
+  },
+  dead: {
+    label: "Día de Muertos",
+    emoji: "💀",
+    accent: "#ff9800",
+    bannerBg: "linear-gradient(90deg, #1a0000, #bf360c, #1a0000)",
+    bannerText: "💀 Día de Muertos — honramos los recuerdos 🌸",
+    glow: "rgba(255,152,0,0.5)"
+  }
+};
+
 function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -23,10 +82,12 @@ function App() {
   const [theme, setTheme] = useState(
     () => localStorage.getItem("retro_theme") || "villano"
   );
+  const [festiveId, setFestiveId] = useState("none");
 
   const isAdmin = user?.role === "admin";
   const isEditor = user?.role === "editor" || isAdmin;
   const isHeroe = theme === "heroe";
+  const festive = FESTIVE[festiveId] || FESTIVE.none;
 
   const toggleTheme = () => {
     const next = theme === "villano" ? "heroe" : "villano";
@@ -34,7 +95,6 @@ function App() {
     localStorage.setItem("retro_theme", next);
   };
 
-  // Villano = CRT oscuro | Héroe = sepia TV antigua
   const colors = isHeroe
     ? {
         bg: "#f3ead8",
@@ -42,7 +102,7 @@ function App() {
         text: "#2a2010",
         muted: "#6a5a40",
         border: "#c4b498",
-        accent: "#c45c00",
+        accent: festiveId === "none" ? "#c45c00" : festive.accent,
         btnIdle: "#ddd0b8"
       }
     : {
@@ -51,7 +111,7 @@ function App() {
         text: "#e8ffe8",
         muted: "#7aaa7a",
         border: "#2a4a2a",
-        accent: "#ff6b00",
+        accent: festive.accent,
         btnIdle: "#1a2a1a"
       };
 
@@ -65,6 +125,22 @@ function App() {
 
   const daysLeft = getDaysLeft();
   const showSubWarning = daysLeft !== null && daysLeft >= 0 && daysLeft <= 7;
+
+  // Festividad
+  useEffect(() => {
+    const unsub = onSnapshot(
+      doc(db, "settings", "festive"),
+      (snap) => {
+        if (snap.exists() && snap.data().active) {
+          setFestiveId(snap.data().active);
+        } else {
+          setFestiveId("none");
+        }
+      },
+      () => setFestiveId("none")
+    );
+    return () => unsub();
+  }, []);
 
   // Mantenimiento / versión
   useEffect(() => {
@@ -220,6 +296,26 @@ function App() {
     setUser(updatedUser);
   };
 
+  const FestiveBanner = () => {
+    if (!festive.bannerText) return null;
+    return (
+      <div
+        style={{
+          background: festive.bannerBg,
+          color: "#fff",
+          padding: "10px 16px",
+          textAlign: "center",
+          fontSize: "14px",
+          fontWeight: 700,
+          letterSpacing: 0.3,
+          borderBottom: `2px solid ${festive.accent}`
+        }}
+      >
+        {festive.bannerText}
+      </div>
+    );
+  };
+
   // ========== ACTUALIZACIÓN ==========
   if (maintenance && countdown.total > 0) {
     const mm = String(countdown.m).padStart(2, "0");
@@ -349,6 +445,7 @@ function App() {
     const view = isAdmin ? adminView : "content";
     return (
       <div style={{ minHeight: "100vh", backgroundColor: "#0a0a0a", color: "white" }}>
+        <FestiveBanner />
         <div
           style={{
             padding: "12px 20px",
@@ -361,7 +458,7 @@ function App() {
             gap: "10px"
           }}
         >
-          <h2 style={{ margin: 0, color: "#ff6b00" }}>
+          <h2 style={{ margin: 0, color: festive.accent }}>
             Retro Recuerdos — {isAdmin ? "Admin" : "Editor"}
           </h2>
           <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
@@ -435,9 +532,7 @@ function App() {
           minHeight: "100vh",
           background: isHeroe
             ? colors.bg
-            : `
-              radial-gradient(ellipse at top, #1a1208 0%, #0a0a0a 50%, #000 100%)
-            `,
+            : "radial-gradient(ellipse at top, #1a1208 0%, #0a0a0a 50%, #000 100%)",
           color: colors.text,
           position: "relative"
         }}
@@ -457,6 +552,8 @@ function App() {
         )}
 
         <div style={{ position: "relative", zIndex: 1 }}>
+          <FestiveBanner />
+
           {showSubWarning && (
             <div
               style={{
@@ -486,7 +583,7 @@ function App() {
               flexWrap: "wrap",
               gap: "10px",
               borderBottom: `1px solid ${colors.border}`,
-              boxShadow: isHeroe ? "none" : "0 2px 20px rgba(255,107,0,0.08)"
+              boxShadow: isHeroe ? "none" : `0 2px 20px ${festive.glow}`
             }}
           >
             <h2
@@ -496,10 +593,11 @@ function App() {
                 color: colors.accent,
                 fontWeight: 800,
                 letterSpacing: 0.5,
-                textShadow: isHeroe ? "none" : "0 0 12px rgba(255,107,0,0.4)"
+                textShadow: isHeroe ? "none" : `0 0 12px ${festive.glow}`
               }}
               onClick={() => setPage("catalog")}
             >
+              {festive.emoji ? `${festive.emoji} ` : ""}
               RETRO RECUERDOS
             </h2>
 
@@ -522,8 +620,7 @@ function App() {
                   onClick={() => setPage(p.id)}
                   style={{
                     padding: "7px 14px",
-                    backgroundColor:
-                      page === p.id ? colors.accent : colors.btnIdle,
+                    backgroundColor: page === p.id ? colors.accent : colors.btnIdle,
                     color: page === p.id || !isHeroe ? "#fff" : "#222",
                     border: "none",
                     borderRadius: "6px",
@@ -629,6 +726,7 @@ function App() {
         color: "white"
       }}
     >
+      <FestiveBanner />
       {showRegister ? (
         <>
           <Register />

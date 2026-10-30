@@ -12,6 +12,16 @@ import {
 } from "firebase/firestore";
 import { db } from "../firebase";
 
+const FESTIVE_THEMES = [
+  { id: "none", label: "Normal", emoji: "📺", color: "#ff6b00" },
+  { id: "halloween", label: "Halloween", emoji: "🎃", color: "#ff6d00" },
+  { id: "christmas", label: "Navidad", emoji: "🎄", color: "#c62828" },
+  { id: "newyear", label: "Año Nuevo", emoji: "✨", color: "#f9a825" },
+  { id: "valentine", label: "San Valentín / Amor y Amistad", emoji: "💕", color: "#e91e63" },
+  { id: "easter", label: "Pascua / Semana Santa", emoji: "🐣", color: "#7e57c2" },
+  { id: "dead", label: "Día de Muertos", emoji: "💀", color: "#ff9800" }
+];
+
 function Admin() {
   const [tab, setTab] = useState("users");
   const [users, setUsers] = useState([]);
@@ -20,6 +30,8 @@ function Admin() {
   const [message, setMessage] = useState("");
   const [phone, setPhone] = useState("+57 321 640 1956");
   const [newPhone, setNewPhone] = useState("");
+  const [festive, setFestive] = useState("none");
+  const [savingFestive, setSavingFestive] = useState(false);
 
   const PLANS = {
     "3days": { label: "3 días gratis", days: 3 },
@@ -75,11 +87,21 @@ function Admin() {
       setUsers(usersList);
       setLoading(false);
     });
+
+    const unsubFestive = onSnapshot(doc(db, "settings", "festive"), (snap) => {
+      if (snap.exists() && snap.data().active) {
+        setFestive(snap.data().active);
+      } else {
+        setFestive("none");
+      }
+    });
+
     loadRequests();
     loadPhone();
     const tick = setInterval(() => setUsers((prev) => [...prev]), 30000);
     return () => {
       unsubUsers();
+      unsubFestive();
       clearInterval(tick);
     };
   }, []);
@@ -87,6 +109,24 @@ function Admin() {
   const showMessage = (text) => {
     setMessage(text);
     setTimeout(() => setMessage(""), 3500);
+  };
+
+  const setFestiveTheme = async (themeId) => {
+    setSavingFestive(true);
+    try {
+      await setDoc(
+        doc(db, "settings", "festive"),
+        { active: themeId, updatedAt: serverTimestamp() },
+        { merge: true }
+      );
+      setFestive(themeId);
+      const label = FESTIVE_THEMES.find((t) => t.id === themeId)?.label || themeId;
+      showMessage(`Festividad activa: ${label}`);
+    } catch (err) {
+      console.error(err);
+      showMessage("Error al cambiar la festividad");
+    }
+    setSavingFestive(false);
   };
 
   const getExpirationDate = (planKey, fromDate = new Date()) => {
@@ -235,7 +275,11 @@ function Admin() {
   const watchingUsers = onlineUsers.filter((u) => u.currentlyWatching);
 
   if (loading) {
-    return <p style={{ textAlign: "center", marginTop: "50px", color: "#fff" }}>Cargando...</p>;
+    return (
+      <p style={{ textAlign: "center", marginTop: "50px", color: "#fff" }}>
+        Cargando...
+      </p>
+    );
   }
 
   return (
@@ -267,29 +311,52 @@ function Admin() {
       </div>
 
       {message && (
-        <p style={{ padding: "12px", backgroundColor: "#1b5e20", color: "#fff", borderRadius: "6px", marginBottom: "16px" }}>
+        <p
+          style={{
+            padding: "12px",
+            backgroundColor: "#1b5e20",
+            color: "#fff",
+            borderRadius: "6px",
+            marginBottom: "16px"
+          }}
+        >
           {message}
         </p>
       )}
 
+      {/* ========== USUARIOS ========== */}
       {tab === "users" && (
         <div>
           <h2 style={{ marginBottom: "12px" }}>Usuarios ({users.length})</h2>
-          <div style={{
-            display: "flex", flexWrap: "wrap", gap: "16px", marginBottom: "20px",
-            padding: "14px 18px", background: "#1a1a1a", borderRadius: "10px", border: "1px solid #333"
-          }}>
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: "16px",
+              marginBottom: "20px",
+              padding: "14px 18px",
+              background: "#1a1a1a",
+              borderRadius: "10px",
+              border: "1px solid #333"
+            }}
+          >
             <div>
               <span style={{ color: "#888", fontSize: "13px" }}>En línea</span>
-              <div style={{ fontSize: "22px", fontWeight: 700, color: "#4CAF50" }}>● {onlineUsers.length}</div>
+              <div style={{ fontSize: "22px", fontWeight: 700, color: "#4CAF50" }}>
+                ● {onlineUsers.length}
+              </div>
             </div>
             <div>
               <span style={{ color: "#888", fontSize: "13px" }}>Viendo algo</span>
-              <div style={{ fontSize: "22px", fontWeight: 700, color: "#ff9800" }}>▶ {watchingUsers.length}</div>
+              <div style={{ fontSize: "22px", fontWeight: 700, color: "#ff9800" }}>
+                ▶ {watchingUsers.length}
+              </div>
             </div>
             <div>
               <span style={{ color: "#888", fontSize: "13px" }}>Desconectados</span>
-              <div style={{ fontSize: "22px", fontWeight: 700, color: "#888" }}>○ {users.length - onlineUsers.length}</div>
+              <div style={{ fontSize: "22px", fontWeight: 700, color: "#888" }}>
+                ○ {users.length - onlineUsers.length}
+              </div>
             </div>
           </div>
 
@@ -313,37 +380,72 @@ function Admin() {
                   const isExpired = timeLeft !== null && timeLeft < 0;
                   const online = isOnline(user);
                   return (
-                    <tr key={user.id} style={{
-                      borderBottom: "1px solid #444",
-                      background: online ? "rgba(76, 175, 80, 0.08)" : "transparent"
-                    }}>
+                    <tr
+                      key={user.id}
+                      style={{
+                        borderBottom: "1px solid #444",
+                        background: online ? "rgba(76, 175, 80, 0.08)" : "transparent"
+                      }}
+                    >
                       <td style={{ padding: "12px" }}>{user.displayName || "-"}</td>
                       <td style={{ padding: "12px" }}>{user.email}</td>
                       <td style={{ padding: "12px", fontSize: "13px" }}>
-                        <span style={{
-                          padding: "3px 8px", borderRadius: "4px", fontWeight: 600,
-                          background: user.role === "admin" ? "#9c27b0" : user.role === "editor" ? "#1565c0" : "#555",
-                          color: "#fff"
-                        }}>
-                          {user.role === "admin" ? "Admin" : user.role === "editor" ? "Editor" : "Usuario"}
+                        <span
+                          style={{
+                            padding: "3px 8px",
+                            borderRadius: "4px",
+                            fontWeight: 600,
+                            background:
+                              user.role === "admin"
+                                ? "#9c27b0"
+                                : user.role === "editor"
+                                ? "#1565c0"
+                                : "#555",
+                            color: "#fff"
+                          }}
+                        >
+                          {user.role === "admin"
+                            ? "Admin"
+                            : user.role === "editor"
+                            ? "Editor"
+                            : "Usuario"}
                         </span>
                       </td>
                       <td style={{ padding: "12px" }}>
-                        {online
-                          ? <span style={{ color: "#4CAF50", fontWeight: 600 }}>● En línea</span>
-                          : <span style={{ color: "#888" }}>○ Desconectado</span>}
+                        {online ? (
+                          <span style={{ color: "#4CAF50", fontWeight: 600 }}>● En línea</span>
+                        ) : (
+                          <span style={{ color: "#888" }}>○ Desconectado</span>
+                        )}
                       </td>
-                      <td style={{ padding: "12px", fontSize: "13px", color: "#ffb74d", maxWidth: "200px" }}>
+                      <td
+                        style={{
+                          padding: "12px",
+                          fontSize: "13px",
+                          color: "#ffb74d",
+                          maxWidth: "200px"
+                        }}
+                      >
                         {online && user.currentlyWatching ? user.currentlyWatching : "—"}
                       </td>
                       <td style={{ padding: "12px" }}>
-                        <span style={{
-                          padding: "4px 8px", borderRadius: "4px", fontSize: "13px", fontWeight: 600,
-                          backgroundColor:
-                            user.status === "active" ? (isExpired ? "#e65100" : "#28a745") :
-                            user.status === "pending" ? "#ffc107" : "#dc3545",
-                          color: user.status === "pending" ? "#000" : "#fff"
-                        }}>
+                        <span
+                          style={{
+                            padding: "4px 8px",
+                            borderRadius: "4px",
+                            fontSize: "13px",
+                            fontWeight: 600,
+                            backgroundColor:
+                              user.status === "active"
+                                ? isExpired
+                                  ? "#e65100"
+                                  : "#28a745"
+                                : user.status === "pending"
+                                ? "#ffc107"
+                                : "#dc3545",
+                            color: user.status === "pending" ? "#000" : "#fff"
+                          }}
+                        >
                           {user.status === "active" && isExpired ? "VENCIDO" : user.status}
                         </span>
                       </td>
@@ -354,7 +456,14 @@ function Admin() {
                             <div style={{ color: isExpired ? "#f44336" : "#aaa" }}>
                               {formatDate(user.subscriptionExpiresAt)}
                               {timeLeft !== null && timeLeft >= 0 && (
-                                <span> ({user.subscriptionPlan === "trial30min" ? `${timeLeft} min` : `${timeLeft} días`})</span>
+                                <span>
+                                  {" "}
+                                  (
+                                  {user.subscriptionPlan === "trial30min"
+                                    ? `${timeLeft} min`
+                                    : `${timeLeft} días`}
+                                  )
+                                </span>
                               )}
                               {isExpired && <span> (vencido)</span>}
                             </div>
@@ -370,9 +479,14 @@ function Admin() {
                               <button
                                 onClick={() => activateWithPlan(user.id, "3days")}
                                 style={{
-                                  padding: "6px 10px", backgroundColor: "#4CAF50", color: "white",
-                                  border: "none", borderRadius: "4px", cursor: "pointer",
-                                  fontSize: "13px", fontWeight: 600
+                                  padding: "6px 10px",
+                                  backgroundColor: "#4CAF50",
+                                  color: "white",
+                                  border: "none",
+                                  borderRadius: "4px",
+                                  cursor: "pointer",
+                                  fontSize: "13px",
+                                  fontWeight: 600
                                 }}
                               >
                                 Activar 3 días gratis
@@ -386,13 +500,22 @@ function Admin() {
                                   }
                                 }}
                                 style={{
-                                  padding: "6px 8px", background: "#28a745", color: "white",
-                                  border: "none", borderRadius: "4px", cursor: "pointer", fontSize: "13px"
+                                  padding: "6px 8px",
+                                  background: "#28a745",
+                                  color: "white",
+                                  border: "none",
+                                  borderRadius: "4px",
+                                  cursor: "pointer",
+                                  fontSize: "13px"
                                 }}
                               >
-                                <option value="" disabled>Otro plan...</option>
+                                <option value="" disabled>
+                                  Otro plan...
+                                </option>
                                 {Object.entries(PLANS).map(([key, p]) => (
-                                  <option key={key} value={key}>{p.label}</option>
+                                  <option key={key} value={key}>
+                                    {p.label}
+                                  </option>
                                 ))}
                               </select>
                             </>
@@ -408,20 +531,34 @@ function Admin() {
                                   }
                                 }}
                                 style={{
-                                  padding: "6px 8px", background: "#2196F3", color: "white",
-                                  border: "none", borderRadius: "4px", cursor: "pointer", fontSize: "13px"
+                                  padding: "6px 8px",
+                                  background: "#2196F3",
+                                  color: "white",
+                                  border: "none",
+                                  borderRadius: "4px",
+                                  cursor: "pointer",
+                                  fontSize: "13px"
                                 }}
                               >
-                                <option value="" disabled>Extender...</option>
+                                <option value="" disabled>
+                                  Extender...
+                                </option>
                                 {Object.entries(PLANS).map(([key, p]) => (
-                                  <option key={key} value={key}>{p.label}</option>
+                                  <option key={key} value={key}>
+                                    {p.label}
+                                  </option>
                                 ))}
                               </select>
                               <button
                                 onClick={() => deactivateSubscription(user.id)}
                                 style={{
-                                  padding: "6px 10px", backgroundColor: "#e65100", color: "white",
-                                  border: "none", borderRadius: "4px", cursor: "pointer", fontSize: "13px"
+                                  padding: "6px 10px",
+                                  backgroundColor: "#e65100",
+                                  color: "white",
+                                  border: "none",
+                                  borderRadius: "4px",
+                                  cursor: "pointer",
+                                  fontSize: "13px"
                                 }}
                               >
                                 Desactivar suscripción
@@ -438,11 +575,18 @@ function Admin() {
                                 }
                               }}
                               style={{
-                                padding: "6px 8px", background: "#5c6bc0", color: "white",
-                                border: "none", borderRadius: "4px", cursor: "pointer", fontSize: "13px"
+                                padding: "6px 8px",
+                                background: "#5c6bc0",
+                                color: "white",
+                                border: "none",
+                                borderRadius: "4px",
+                                cursor: "pointer",
+                                fontSize: "13px"
                               }}
                             >
-                              <option value="" disabled>Cambiar rol...</option>
+                              <option value="" disabled>
+                                Cambiar rol...
+                              </option>
                               <option value="user">Usuario</option>
                               <option value="editor">Editor</option>
                             </select>
@@ -451,8 +595,13 @@ function Admin() {
                             <button
                               onClick={() => changeStatus(user.id, "disabled")}
                               style={{
-                                padding: "6px 10px", backgroundColor: "#dc3545", color: "white",
-                                border: "none", borderRadius: "4px", cursor: "pointer", fontSize: "13px"
+                                padding: "6px 10px",
+                                backgroundColor: "#dc3545",
+                                color: "white",
+                                border: "none",
+                                borderRadius: "4px",
+                                cursor: "pointer",
+                                fontSize: "13px"
                               }}
                             >
                               Desactivar cuenta
@@ -469,6 +618,7 @@ function Admin() {
         </div>
       )}
 
+      {/* ========== SOLICITUDES ========== */}
       {tab === "requests" && (
         <div>
           <h2 style={{ marginBottom: "16px" }}>Solicitudes ({requests.length})</h2>
@@ -477,10 +627,24 @@ function Admin() {
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
               {requests.map((req) => (
-                <div key={req.id} style={{
-                  background: "#1e1e1e", padding: "18px", borderRadius: "10px", border: "1px solid #333"
-                }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: "10px", marginBottom: "10px" }}>
+                <div
+                  key={req.id}
+                  style={{
+                    background: "#1e1e1e",
+                    padding: "18px",
+                    borderRadius: "10px",
+                    border: "1px solid #333"
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      flexWrap: "wrap",
+                      gap: "10px",
+                      marginBottom: "10px"
+                    }}
+                  >
                     <div>
                       <strong style={{ fontSize: "17px" }}>{req.title}</strong>
                       <div style={{ color: "#888", fontSize: "13px", marginTop: "4px" }}>
@@ -489,35 +653,79 @@ function Admin() {
                         {" • "}Pedido por: {req.displayName || req.email}
                       </div>
                     </div>
-                    <span style={{
-                      padding: "4px 12px", borderRadius: "20px", fontSize: "12px", fontWeight: 700,
-                      background: req.status === "available" ? "#28a745" : req.status === "unavailable" ? "#dc3545" : "#ffc107",
-                      color: req.status === "pending" ? "#000" : "#fff"
-                    }}>
-                      {req.status === "available" ? "Disponible" : req.status === "unavailable" ? "No se pudo agregar" : "En espera"}
+                    <span
+                      style={{
+                        padding: "4px 12px",
+                        borderRadius: "20px",
+                        fontSize: "12px",
+                        fontWeight: 700,
+                        background:
+                          req.status === "available"
+                            ? "#28a745"
+                            : req.status === "unavailable"
+                            ? "#dc3545"
+                            : "#ffc107",
+                        color: req.status === "pending" ? "#000" : "#fff"
+                      }}
+                    >
+                      {req.status === "available"
+                        ? "Disponible"
+                        : req.status === "unavailable"
+                        ? "No se pudo agregar"
+                        : "En espera"}
                     </span>
                   </div>
                   {req.status === "pending" && (
-                    <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginTop: "12px" }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: "10px",
+                        flexWrap: "wrap",
+                        marginTop: "12px"
+                      }}
+                    >
                       <button
-                        onClick={() => respondRequest(req.id, "available", "Ya está disponible en el catálogo")}
-                        style={{ padding: "8px 16px", background: "#28a745", color: "#fff", border: "none", borderRadius: "6px", cursor: "pointer", fontWeight: 600 }}
+                        onClick={() =>
+                          respondRequest(req.id, "available", "Ya está disponible en el catálogo")
+                        }
+                        style={{
+                          padding: "8px 16px",
+                          background: "#28a745",
+                          color: "#fff",
+                          border: "none",
+                          borderRadius: "6px",
+                          cursor: "pointer",
+                          fontWeight: 600
+                        }}
                       >
                         ✓ Disponible
                       </button>
                       <button
                         onClick={() => {
-                          const msg = window.prompt("Mensaje para el usuario (opcional):", "Por ahora no fue posible agregarla");
+                          const msg = window.prompt(
+                            "Mensaje para el usuario (opcional):",
+                            "Por ahora no fue posible agregarla"
+                          );
                           respondRequest(req.id, "unavailable", msg || "No se pudo agregar");
                         }}
-                        style={{ padding: "8px 16px", background: "#dc3545", color: "#fff", border: "none", borderRadius: "6px", cursor: "pointer", fontWeight: 600 }}
+                        style={{
+                          padding: "8px 16px",
+                          background: "#dc3545",
+                          color: "#fff",
+                          border: "none",
+                          borderRadius: "6px",
+                          cursor: "pointer",
+                          fontWeight: 600
+                        }}
                       >
                         ✗ No se pudo agregar
                       </button>
                     </div>
                   )}
                   {req.adminMessage && (
-                    <p style={{ margin: "12px 0 0", color: "#aaa", fontSize: "14px" }}>Mensaje: {req.adminMessage}</p>
+                    <p style={{ margin: "12px 0 0", color: "#aaa", fontSize: "14px" }}>
+                      Mensaje: {req.adminMessage}
+                    </p>
                   )}
                 </div>
               ))}
@@ -526,10 +734,75 @@ function Admin() {
         </div>
       )}
 
+      {/* ========== CONFIGURACIÓN ========== */}
       {tab === "settings" && (
         <div>
           <h2 style={{ marginBottom: "16px" }}>Configuración</h2>
-          <div style={{ background: "#1e1e1e", padding: "24px", borderRadius: "10px", maxWidth: "500px" }}>
+
+          {/* FESTIVIDADES */}
+          <div
+            style={{
+              background: "#1e1e1e",
+              padding: "24px",
+              borderRadius: "10px",
+              maxWidth: "640px",
+              marginBottom: "24px",
+              border: "1px solid #333"
+            }}
+          >
+            <h3 style={{ marginTop: 0, color: "#ffcc00" }}>🎉 Festividad de la página</h3>
+            <p style={{ color: "#aaa", fontSize: "14px", marginBottom: "16px" }}>
+              Activa un tema visual para toda la app (catálogo, header, etc.). Solo puede haber uno
+              activo. Elige <strong>Normal</strong> para quitar la decoración.
+            </p>
+            <p style={{ color: "#888", fontSize: "13px", marginBottom: "14px" }}>
+              Activo ahora:{" "}
+              <strong style={{ color: "#fff" }}>
+                {FESTIVE_THEMES.find((t) => t.id === festive)?.emoji}{" "}
+                {FESTIVE_THEMES.find((t) => t.id === festive)?.label || festive}
+              </strong>
+            </p>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
+                gap: "10px"
+              }}
+            >
+              {FESTIVE_THEMES.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  disabled={savingFestive}
+                  onClick={() => setFestiveTheme(t.id)}
+                  style={{
+                    padding: "12px 10px",
+                    borderRadius: "8px",
+                    border: festive === t.id ? `2px solid ${t.color}` : "1px solid #444",
+                    background: festive === t.id ? `${t.color}33` : "#2a2a2a",
+                    color: "#fff",
+                    cursor: savingFestive ? "wait" : "pointer",
+                    fontWeight: festive === t.id ? 700 : 500,
+                    fontSize: "13px",
+                    textAlign: "left"
+                  }}
+                >
+                  {t.emoji} {t.label}
+                  {festive === t.id ? " ✓" : ""}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* TELÉFONO */}
+          <div
+            style={{
+              background: "#1e1e1e",
+              padding: "24px",
+              borderRadius: "10px",
+              maxWidth: "500px"
+            }}
+          >
             <h3 style={{ marginTop: 0, color: "#ffcc00" }}>Número de contacto (WhatsApp)</h3>
             <p style={{ color: "#aaa", fontSize: "14px", marginBottom: "12px" }}>
               Este número se muestra a los usuarios cuando se registran.
@@ -539,31 +812,61 @@ function Admin() {
               value={newPhone}
               onChange={(e) => setNewPhone(e.target.value)}
               style={{
-                width: "100%", padding: "12px", borderRadius: "8px", border: "1px solid #555",
-                background: "#333", color: "white", marginBottom: "12px", boxSizing: "border-box"
+                width: "100%",
+                padding: "12px",
+                borderRadius: "8px",
+                border: "1px solid #555",
+                background: "#333",
+                color: "white",
+                marginBottom: "12px",
+                boxSizing: "border-box"
               }}
             />
-            <button onClick={savePhone} style={{
-              padding: "10px 20px", background: "#ff6b00", color: "white", border: "none",
-              borderRadius: "6px", cursor: "pointer", fontWeight: 600
-            }}>
+            <button
+              onClick={savePhone}
+              style={{
+                padding: "10px 20px",
+                background: "#ff6b00",
+                color: "white",
+                border: "none",
+                borderRadius: "6px",
+                cursor: "pointer",
+                fontWeight: 600
+              }}
+            >
               Guardar número
             </button>
             <p style={{ marginTop: "16px", color: "#888", fontSize: "13px" }}>
               Número actual: <strong style={{ color: "#fff" }}>{phone}</strong>
             </p>
           </div>
-          <div style={{
-            background: "#1e1e1e", padding: "24px", borderRadius: "10px", maxWidth: "500px", marginTop: "24px"
-          }}>
+
+          {/* ACTUALIZACIÓN */}
+          <div
+            style={{
+              background: "#1e1e1e",
+              padding: "24px",
+              borderRadius: "10px",
+              maxWidth: "500px",
+              marginTop: "24px"
+            }}
+          >
             <h3 style={{ marginTop: 0, color: "#ffcc00" }}>Actualización de la página</h3>
             <p style={{ color: "#aaa", fontSize: "14px", marginBottom: "12px" }}>
               Al activarlo, todos se desconectan y la página se bloquea 4 minutos.
             </p>
-            <button onClick={activateUpdate} style={{
-              padding: "12px 20px", background: "#e65100", color: "white", border: "none",
-              borderRadius: "6px", cursor: "pointer", fontWeight: 700
-            }}>
+            <button
+              onClick={activateUpdate}
+              style={{
+                padding: "12px 20px",
+                background: "#e65100",
+                color: "white",
+                border: "none",
+                borderRadius: "6px",
+                cursor: "pointer",
+                fontWeight: 700
+              }}
+            >
               Activar actualización (bloqueo 4 min)
             </button>
           </div>
