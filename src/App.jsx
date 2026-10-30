@@ -70,6 +70,81 @@ const FESTIVE = {
   }
 };
 
+function FestiveParticles({ festiveId }) {
+  if (!festiveId || festiveId === "none") return null;
+
+  const configs = {
+    halloween: { items: ["🕷️", "🕸️", "🕷️"], count: 12, mode: "crawl" },
+    christmas: { items: ["❄️", "❅", "✦"], count: 28, mode: "fall" },
+    valentine: { items: ["💕", "❤️", "💗"], count: 22, mode: "fall" },
+    dead: { items: ["💀", "🌸", "🕯️"], count: 16, mode: "fall" },
+    newyear: { items: ["✨", "⭐", "🎊", "🎉", "✦"], count: 30, mode: "fall" },
+    easter: { items: ["🐣", "🥚", "🌷"], count: 14, mode: "fall" }
+  };
+
+  const cfg = configs[festiveId];
+  if (!cfg) return null;
+
+  const particles = Array.from({ length: cfg.count }, (_, i) => ({
+    left: (i * 37 + 11) % 100,
+    delay: (i * 0.28) % 7,
+    duration: 5 + (i % 6),
+    size: 12 + (i % 12),
+    emoji: cfg.items[i % cfg.items.length]
+  }));
+
+  return (
+    <div
+      aria-hidden
+      style={{
+        position: "fixed",
+        inset: 0,
+        pointerEvents: "none",
+        zIndex: 50,
+        overflow: "hidden"
+      }}
+    >
+      <style>{`
+        @keyframes festiveFall {
+          0%   { transform: translateY(-12vh) translateX(0) rotate(0deg); opacity: 0; }
+          8%   { opacity: 1; }
+          100% { transform: translateY(112vh) translateX(20px) rotate(360deg); opacity: 0.9; }
+        }
+        @keyframes festiveCrawl {
+          0%   { transform: translate(0, 0) rotate(0deg); }
+          25%  { transform: translate(28px, 18px) rotate(10deg); }
+          50%  { transform: translate(-12px, 36px) rotate(-8deg); }
+          75%  { transform: translate(18px, 8px) rotate(5deg); }
+          100% { transform: translate(0, 0) rotate(0deg); }
+        }
+      `}</style>
+      {particles.map((p, i) => (
+        <span
+          key={i}
+          style={{
+            position: "absolute",
+            left: `${p.left}%`,
+            top: cfg.mode === "crawl" ? `${(i * 17) % 80}%` : "-8%",
+            fontSize: p.size,
+            animation:
+              cfg.mode === "crawl"
+                ? `festiveCrawl ${4 + (i % 4)}s ease-in-out ${p.delay}s infinite`
+                : `festiveFall ${p.duration}s linear ${p.delay}s infinite`,
+            filter:
+              festiveId === "halloween"
+                ? "drop-shadow(0 0 4px #ff6d00)"
+                : festiveId === "newyear"
+                ? "drop-shadow(0 0 6px rgba(255,215,0,0.7))"
+                : undefined
+          }}
+        >
+          {p.emoji}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -126,7 +201,6 @@ function App() {
   const daysLeft = getDaysLeft();
   const showSubWarning = daysLeft !== null && daysLeft >= 0 && daysLeft <= 7;
 
-  // Festividad
   useEffect(() => {
     const unsub = onSnapshot(
       doc(db, "settings", "festive"),
@@ -142,7 +216,6 @@ function App() {
     return () => unsub();
   }, []);
 
-  // Mantenimiento / versión
   useEffect(() => {
     const unsub = onSnapshot(
       doc(db, "settings", "app"),
@@ -192,7 +265,6 @@ function App() {
     return () => unsub();
   }, []);
 
-  // Cuenta regresiva
   useEffect(() => {
     if (!maintenance) return;
     const TOTAL_MS = 4 * 60 * 1000;
@@ -209,7 +281,6 @@ function App() {
     return () => clearInterval(id);
   }, [maintenance]);
 
-  // Auth
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
@@ -245,7 +316,6 @@ function App() {
     return () => unsubscribe();
   }, []);
 
-  // Suscripción + rol en tiempo real
   useEffect(() => {
     if (!user?.uid) return;
     const unsub = onSnapshot(doc(db, "users", user.uid), (snap) => {
@@ -316,7 +386,6 @@ function App() {
     );
   };
 
-  // ========== ACTUALIZACIÓN ==========
   if (maintenance && countdown.total > 0) {
     const mm = String(countdown.m).padStart(2, "0");
     const ss = String(countdown.s).padStart(2, "0");
@@ -440,11 +509,11 @@ function App() {
     );
   }
 
-  // ========== ADMIN / EDITOR ==========
   if (user && isEditor && adminView) {
     const view = isAdmin ? adminView : "content";
     return (
       <div style={{ minHeight: "100vh", backgroundColor: "#0a0a0a", color: "white" }}>
+        <FestiveParticles festiveId={festiveId} />
         <FestiveBanner />
         <div
           style={{
@@ -524,7 +593,6 @@ function App() {
     );
   }
 
-  // ========== USUARIO LOGUEADO ==========
   if (user) {
     return (
       <div
@@ -550,6 +618,8 @@ function App() {
             }}
           />
         )}
+
+        <FestiveParticles festiveId={festiveId} />
 
         <div style={{ position: "relative", zIndex: 1 }}>
           <FestiveBanner />
@@ -717,7 +787,6 @@ function App() {
     );
   }
 
-  // ========== NO LOGUEADO ==========
   return (
     <div
       style={{
@@ -726,6 +795,7 @@ function App() {
         color: "white"
       }}
     >
+      <FestiveParticles festiveId={festiveId} />
       <FestiveBanner />
       {showRegister ? (
         <>
